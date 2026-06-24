@@ -43,7 +43,15 @@ function loadPersistedProfile(user: User | null) {
 }
 
 function App() {
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window === 'undefined') return 'light';
+    try {
+      const saved = window.localStorage.getItem('tsr_m_theme');
+      return saved === 'dark' ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  });
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -59,11 +67,21 @@ function App() {
   const [device] = useState(getDeviceType());
 
   useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => undefined);
+    }
+  }, []);
+
+  useEffect(() => {
     loadInitialState();
   }, []);
 
   useEffect(() => {
     document.body.dataset.theme = theme;
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('tsr_m_theme', theme);
+    }
     return () => {
       document.body.dataset.theme = 'light';
     };
@@ -171,10 +189,33 @@ function App() {
     }
   };
 
+  const handleOpenProfileChat = async (user: User) => {
+    if (!currentUser) return;
+    const existing = chats.find(
+      (chat) => !chat.isGroup && chat.members.includes(currentUser.id) && chat.members.includes(user.id),
+    );
+
+    if (existing) {
+      setActiveChatId(existing.id);
+      setProfileViewerUser(null);
+      setSidebarOpen(false);
+      return;
+    }
+
+    const created = await createChat(user.displayName, [user.username], false, currentUser.id);
+    setChats((prev) => [created, ...prev]);
+    setActiveChatId(created.id);
+    setProfileViewerUser(null);
+    setSidebarOpen(false);
+  };
+
   const handleCreateChat = async (title: string, participants: string, isGroup: boolean) => {
     if (!currentUser) return;
-    await createChat(title, participants.split(',').map((value) => value.trim()).filter(Boolean), isGroup, currentUser.id);
-    await refreshChats();
+    const created = await createChat(title, participants.split(',').map((value) => value.trim()).filter(Boolean), isGroup, currentUser.id);
+    setChats((prev) => [created, ...prev]);
+    setActiveChatId(created.id);
+    setShowCreateChat(false);
+    setSidebarOpen(false);
   };
 
   const handleSendMessage = async (chatId: string, text: string, imageUrl?: string, stickerUrl?: string, voiceUrl?: string) => {
@@ -307,13 +348,15 @@ function App() {
             onClick={() => setSidebarOpen((prev) => !prev)}
             aria-label={sidebarOpen ? 'Скрыть меню' : 'Открыть меню'}
           >
-            TSR_M
+            ☰
           </button>
           <div className="left-rail" style={appStyle.sidebar}>
             {sidebarOpen ? (
               <div className="sidebar-panel-content">
                 <div className="sidebar-topbar">
-                  <div className="brand">TSR_M</div>
+                  <button type="button" className="brand brand-button" onClick={() => setSidebarOpen((prev) => !prev)}>
+                    TSR_M
+                  </button>
                   <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="theme-toggle">
                     {theme === 'light' ? 'Тёмная тема' : 'Светлая тема'}
                   </button>
@@ -401,26 +444,57 @@ function App() {
                 onPinMessage={handlePinMessage}
               />
             ) : (
-              <div className="empty-state">Выберите чат или создайте новый</div>
+              <div className="empty-state-card">
+                <div className="empty-state-title">Начните общение</div>
+                <div className="empty-state-copy">Создайте чат или откройте существующий, чтобы продолжить переписку.</div>
+                <button type="button" className="primary-button" onClick={() => setShowCreateChat(true)}>
+                  Создать чат
+                </button>
+              </div>
             )}
           </main>
           {profileViewerUser ? (
             <div className="overlay-panel" role="dialog" aria-modal="true">
-              <div className="overlay-card">
-                <div className="overlay-card-header">
-                  <h3>Профиль пользователя</h3>
-                  <button type="button" className="secondary-button" onClick={() => setProfileViewerUser(null)}>Закрыть</button>
+              <div className="overlay-card profile-view-card">
+                <div className="profile-view-hero">
+                  <div className="profile-view-main">
+                    <div className="profile-view-avatar-wrap">
+                      <Avatar src={profileViewerUser.avatarUrl} alt={profileViewerUser.displayName} name={profileViewerUser.displayName} size={104} />
+                      <span className="profile-view-status-badge">{profileViewerUser.statusEmoji}</span>
+                    </div>
+                    <div className="profile-view-text">
+                      <div className="profile-view-name">{profileViewerUser.displayName}</div>
+                      <div className="profile-view-username">{profileViewerUser.username}</div>
+                      <div className="profile-view-bio">{profileViewerUser.bio || 'Пользователь пока не добавил описание.'}</div>
+                    </div>
+                  </div>
+                  <div className="profile-view-actions">
+                    <button type="button" className="primary-button" onClick={() => handleOpenProfileChat(profileViewerUser)}>
+                      Написать
+                    </button>
+                    <button type="button" className="secondary-button" onClick={() => setProfileViewerUser(null)}>
+                      Закрыть
+                    </button>
+                  </div>
                 </div>
-                <div className="profile-preview-card">
-                  <div className="avatar-wrapper">
-                    <Avatar src={profileViewerUser.avatarUrl} alt={profileViewerUser.displayName} name={profileViewerUser.displayName} size={92} />
-                    <span className="status-badge">{profileViewerUser.statusEmoji}</span>
+
+                <div className="profile-view-meta">
+                  <div className="profile-view-meta-item">
+                    <span className="profile-view-meta-label">Статус</span>
+                    <span className="profile-view-meta-value">В сети · {profileViewerUser.statusEmoji}</span>
                   </div>
-                  <div className="profile-preview-card-info">
-                    <div className="profile-name">{profileViewerUser.displayName}</div>
-                    <div className="chat-subtitle">{profileViewerUser.username}</div>
-                    <div className="chat-subtitle">{profileViewerUser.bio}</div>
-                  </div>
+                  {profileViewerUser.phone ? (
+                    <div className="profile-view-meta-item">
+                      <span className="profile-view-meta-label">Телефон</span>
+                      <span className="profile-view-meta-value">{profileViewerUser.phone}</span>
+                    </div>
+                  ) : null}
+                  {profileViewerUser.googleEmail ? (
+                    <div className="profile-view-meta-item">
+                      <span className="profile-view-meta-label">Google</span>
+                      <span className="profile-view-meta-value">{profileViewerUser.googleEmail}</span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>

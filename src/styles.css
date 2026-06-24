@@ -651,6 +651,100 @@ button:focus {
   align-items: center;
 }
 
+.profile-view-card {
+  padding: 0;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-alt) 100%);
+}
+
+.profile-view-hero {
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.16), rgba(34, 211, 238, 0.14));
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-view-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.profile-view-avatar-wrap {
+  position: relative;
+}
+
+.profile-view-status-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--surface);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  font-size: 1rem;
+}
+
+.profile-view-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-view-name {
+  font-size: 1.28rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.profile-view-username {
+  color: #6366f1;
+  font-weight: 600;
+}
+
+.profile-view-bio {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.profile-view-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.profile-view-meta {
+  display: grid;
+  gap: 10px;
+  padding: 18px 24px 24px;
+}
+
+.profile-view-meta-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.profile-view-meta-label {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.profile-view-meta-value {
+  font-weight: 600;
+  text-align: right;
+}
+
 .group-admin-row {
   margin-top: 14px;
 }
