@@ -30,7 +30,7 @@ export default function ChatList({ chats, users, activeId, onSelect }: Props) {
               onClick={() => onSelect(chat.id)}
             >
               <div className="chat-item-heading">
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div className="chat-item-main">
                   <div className="chat-room-avatars">
                     {members.slice(0, 2).map((m) => (
                       <div key={m.id} className="avatar-small-wrapper">
@@ -39,13 +39,16 @@ export default function ChatList({ chats, users, activeId, onSelect }: Props) {
                       </div>
                     ))}
                   </div>
-                  <div className="chat-title">{chat.title || participantNames}</div>
+                  <div className="chat-item-text">
+                    <div className="chat-title">{chat.title || participantNames}</div>
+                    <div className="chat-snippet">{participantNames || 'Новый чат'}</div>
+                  </div>
                 </div>
-                <div className="chat-meta">{chat.isGroup ? 'Группа' : 'Переписка'}</div>
+                <div className="chat-meta-badge">{chat.isGroup ? 'Группа' : 'Личка'}</div>
               </div>
               <div className="chat-item-row">
-                <div className="chat-snippet">{participantNames || 'Новый чат'}</div>
-                <div className="chat-badge">{chat.members.length}</div>
+                <div className="chat-meta">{chat.members.length} участник{chat.members.length === 1 ? '' : 'а'}</div>
+                <div className="chat-badge">{chat.messages.length}</div>
               </div>
             </button>
           );

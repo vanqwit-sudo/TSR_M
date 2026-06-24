@@ -60,7 +60,6 @@ function App() {
   const [searchMode, setSearchMode] = useState<'chats' | 'users'>('chats');
   const [showProfile, setShowProfile] = useState(false);
   const [showCreateChat, setShowCreateChat] = useState(false);
-  const [showGifts, setShowGifts] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [profileViewerUser, setProfileViewerUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -375,37 +374,15 @@ function App() {
                 <div className="sidebar-block">
                   <div className="sidebar-top">
                     <div className="sidebar-title">Управление</div>
-                    <button className="sidebar-action" type="button" onClick={() => { setShowProfile((prev) => !prev); setShowCreateChat(false); setShowGifts(false); }}>
+                    <button className="sidebar-action" type="button" onClick={() => { setShowProfile((prev) => !prev); setShowCreateChat(false); }}>
                       {showProfile ? 'Скрыть профиль' : 'Профиль'}
                     </button>
-                    <button className="sidebar-action" type="button" onClick={() => { setShowCreateChat((prev) => !prev); setShowProfile(false); setShowGifts(false); }}>
+                    <button className="sidebar-action" type="button" onClick={() => { setShowCreateChat((prev) => !prev); setShowProfile(false); }}>
                       {showCreateChat ? 'Скрыть чат' : 'Новый чат'}
-                    </button>
-                    <button className="sidebar-action" type="button" onClick={() => { setShowGifts((prev) => !prev); setShowProfile(false); setShowCreateChat(false); }}>
-                      {showGifts ? 'Скрыть гивоки' : 'Гивоки'}
                     </button>
                   </div>
                   {showProfile && <ProfileEditor profile={currentUser} onUpdate={handleProfileUpdate} />}
                   {showCreateChat && <CreateChat onCreate={handleCreateChat} />}
-                  {showGifts && (
-                    <div className="gift-panel">
-                      <div className="gift-panel-title">Открытая база гивок</div>
-                      <div className="gift-grid">
-                        {[
-                          { emoji: '🎁', title: 'Подарок', text: 'Лёгкий и тёплый' },
-                          { emoji: '💎', title: 'Бриллиант', text: 'Для особых моментов' },
-                          { emoji: '🎉', title: 'Праздник', text: 'Для радости и эмоций' },
-                          { emoji: '💝', title: 'Сердце', text: 'Тёплое сообщение' },
-                        ].map((gift) => (
-                          <div key={gift.title} className="gift-card">
-                            <div className="gift-emoji">{gift.emoji}</div>
-                            <div className="gift-title">{gift.title}</div>
-                            <div className="gift-text">{gift.text}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
                 <button className="logout-button" onClick={handleLogout}>
                   Выйти
