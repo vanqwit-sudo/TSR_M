@@ -365,30 +365,11 @@ function App() {
             {sidebarOpen ? (
               <div className="sidebar-panel-content">
                 <div className="sidebar-topbar">
-                  <div className="brand-block">
-                    <button type="button" className="brand brand-button" onClick={() => setSidebarOpen((prev) => !prev)}>
-                      TSR_M
-                    </button>
-                    <div className="brand-caption">Telegram-like messenger</div>
-                  </div>
+                  <button type="button" className="brand brand-button" onClick={() => setSidebarOpen((prev) => !prev)}>
+                    ☰
+                  </button>
                   <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="theme-toggle compact-theme-toggle">
                     {theme === 'light' ? '🌙' : '☀️'}
-                  </button>
-                </div>
-                <div className="sidebar-search">
-                  <input
-                    type="text"
-                    placeholder="Поиск по чатам и людям"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </div>
-                <div className="compact-search-mode sidebar-search-mode">
-                  <button type="button" className={searchMode === 'chats' ? 'active' : ''} onClick={() => setSearchMode('chats')}>
-                    Чаты
-                  </button>
-                  <button type="button" className={searchMode === 'users' ? 'active' : ''} onClick={() => setSearchMode('users')}>
-                    Люди
                   </button>
                 </div>
                 <div className="sidebar-profile-summary">

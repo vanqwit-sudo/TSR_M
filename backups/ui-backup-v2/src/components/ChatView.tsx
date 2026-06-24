@@ -262,8 +262,8 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
             {activeView === 'chat' ? 'Поиск' : 'Чат'}
           </button>
           {chat.isGroup && (
-            <button type="button" onClick={() => setShowGroupSettings(true)} className="secondary-button group-settings-trigger">
-              ⚙ Настройки
+            <button type="button" onClick={() => setShowGroupSettings(true)} className="secondary-button">
+              Настройки
             </button>
           )}
           <button type="button" onClick={() => onVoteDelete(chat.id)} className="delete-vote-button">
