@@ -97,21 +97,28 @@ function deleteThreshold(chat) {
 
 function parseWatchCommand(text) {
   const normalized = String(text || '').trim();
-  if (!normalized.startsWith('!смотреть')) return null;
+  if (!normalized) return null;
 
-  const quotedMatch = normalized.match(/^!смотреть\s+"([^"]+)"\s+"([^"]+)"$/i);
-  if (quotedMatch) {
-    return { type: 'search', channel: quotedMatch[1].trim(), title: quotedMatch[2].trim() };
+  if (normalized.startsWith('!смотреть')) {
+    const quotedMatch = normalized.match(/^!смотреть\s+"([^"]+)"\s+"([^"]+)"$/i);
+    if (quotedMatch) {
+      return { type: 'search', channel: quotedMatch[1].trim(), title: quotedMatch[2].trim() };
+    }
+
+    const directUrlMatch = normalized.match(/^!смотреть\s+(https?:\/\/\S+)$/i);
+    if (directUrlMatch) {
+      return { type: 'url', sourceUrl: directUrlMatch[1].trim() };
+    }
+
+    const simpleMatch = normalized.match(/^!смотреть\s+(.+)$/i);
+    if (simpleMatch) {
+      return { type: 'search', channel: '', title: simpleMatch[1].trim() };
+    }
   }
 
-  const directUrlMatch = normalized.match(/^!смотреть\s+(https?:\/\/\S+)$/i);
+  const directUrlMatch = normalized.match(/https?:\/\/(?:www\.)?(?:youtube\.com\/[^\s]+|youtu\.be\/[^\s]+)/i);
   if (directUrlMatch) {
-    return { type: 'url', sourceUrl: directUrlMatch[1].trim() };
-  }
-
-  const simpleMatch = normalized.match(/^!смотреть\s+(.+)$/i);
-  if (simpleMatch) {
-    return { type: 'search', channel: '', title: simpleMatch[1].trim() };
+    return { type: 'url', sourceUrl: directUrlMatch[0].replace(/[.,;:!?)]*$/, '') };
   }
 
   return null;
@@ -433,10 +440,13 @@ app.get('/api/chats/:chatId/video', async (req, res) => {
 
 app.post('/api/chats/:chatId/video', async (req, res) => {
   const { chatId } = req.params;
-  const { videoId, title, channel, startedBy, thumbnailUrl, status, currentTime } = req.body;
+  const { videoId, title, channel, startedBy, thumbnailUrl, status, currentTime, sourceUrl } = req.body;
   const state = await loadState();
   const chat = getChatById(state, chatId);
   if (!chat) return res.status(404).send('Чат не найден');
+
+  const nextStatus = status || chat.sharedVideo?.status || 'paused';
+  const nextCurrentTime = Number.isFinite(Number(currentTime)) ? Number(currentTime) : chat.sharedVideo?.currentTime || 0;
 
   chat.sharedVideo = {
     videoId: videoId || chat.sharedVideo?.videoId || '',
@@ -444,8 +454,9 @@ app.post('/api/chats/:chatId/video', async (req, res) => {
     channel: channel || chat.sharedVideo?.channel || 'YouTube',
     startedBy: startedBy || chat.sharedVideo?.startedBy || 'участник',
     thumbnailUrl: thumbnailUrl || chat.sharedVideo?.thumbnailUrl || null,
-    status: status || chat.sharedVideo?.status || 'paused',
-    currentTime: Number.isFinite(Number(currentTime)) ? Number(currentTime) : chat.sharedVideo?.currentTime || 0,
+    sourceUrl: sourceUrl || req.body?.sourceUrl || chat.sharedVideo?.sourceUrl || null,
+    status: nextStatus,
+    currentTime: nextCurrentTime,
   };
 
   state.chats = state.chats.map((item) => (item.id === chatId ? chat : item));

@@ -40,7 +40,8 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
   const [sharedVideo, setSharedVideo] = useState<SharedVideoState | null>(chat.sharedVideo ?? null);
   const [playerAutoplay, setPlayerAutoplay] = useState(false);
   const [playerCurrentTime, setPlayerCurrentTime] = useState(0);
-  const [playerProvider, setPlayerProvider] = useState<'youtube-nocookie' | 'youtube' | 'invidious'>('youtube-nocookie');
+  const [playerProvider, setPlayerProvider] = useState<'piped' | 'invidious' | 'youtube-nocookie' | 'youtube'>('piped');
+  const [playerRefreshToken, setPlayerRefreshToken] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -49,11 +50,18 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
   const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
-    setSharedVideo(chat.sharedVideo ?? null);
-    setPlayerAutoplay(false);
-    setPlayerCurrentTime(chat.sharedVideo?.currentTime ?? 0);
-    setPlayerProvider('youtube-nocookie');
-  }, [chat.sharedVideo]);
+    if (!chat.sharedVideo?.videoId) {
+      setSharedVideo(null);
+      setPlayerAutoplay(false);
+      setPlayerCurrentTime(0);
+      return;
+    }
+
+    setSharedVideo(chat.sharedVideo);
+    setPlayerAutoplay(chat.sharedVideo.status === 'playing');
+    setPlayerCurrentTime(chat.sharedVideo.currentTime ?? 0);
+    setPlayerProvider('piped');
+  }, [chat.sharedVideo?.videoId, chat.sharedVideo?.status, chat.sharedVideo?.currentTime]);
 
   useEffect(() => {
     if (!chat.id) return;
@@ -66,6 +74,16 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
           setSharedVideo(nextVideo);
         } else if (nextVideo && sharedVideo) {
           setSharedVideo((prev) => prev ? { ...prev, ...nextVideo } : nextVideo);
+        }
+
+        if (nextVideo?.status) {
+          setPlayerAutoplay(nextVideo.status === 'playing');
+        }
+        if (typeof nextVideo?.currentTime === 'number') {
+          setPlayerCurrentTime(nextVideo.currentTime);
+        }
+        if (nextVideo?.videoId) {
+          setPlayerRefreshToken((value) => value + 1);
         }
       } catch {
         // ignore sync failures
@@ -86,7 +104,13 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
       autoplay: playerAutoplay ? '1' : '0',
       controls: '1',
       start: String(Math.max(0, Math.round(playerCurrentTime))),
+      iv_load_policy: '3',
+      enablejsapi: '1',
     });
+
+    if (playerProvider === 'piped') {
+      return `https://piped.video/embed/${encodeURIComponent(sharedVideo.videoId)}?${params.toString()}`;
+    }
 
     if (playerProvider === 'invidious') {
       return `https://yewtu.be/embed/${encodeURIComponent(sharedVideo.videoId)}?${params.toString()}`;
@@ -101,21 +125,33 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
 
   const pushVideoState = async (status: 'playing' | 'paused', currentTime?: number) => {
     if (!sharedVideo?.videoId) return;
+    const nextTime = Math.max(0, Math.round(currentTime ?? playerCurrentTime ?? sharedVideo.currentTime ?? 0));
     setIsSyncing(true);
     try {
-      await fetch(`/api/chats/${encodeURIComponent(chat.id)}/video`, {
+      const response = await fetch(`/api/chats/${encodeURIComponent(chat.id)}/video`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           videoId: sharedVideo.videoId,
           title: sharedVideo.title,
           channel: sharedVideo.channel,
-          startedBy: sharedVideo.startedBy,
+          startedBy: sharedVideo.startedBy || currentUser.displayName,
           thumbnailUrl: sharedVideo.thumbnailUrl || null,
+          sourceUrl: sharedVideo.sourceUrl || null,
           status,
-          currentTime: currentTime ?? playerCurrentTime ?? sharedVideo.currentTime ?? 0,
+          currentTime: nextTime,
         }),
       });
+
+      if (response.ok) {
+        const nextVideo = (await response.json()) as SharedVideoState | null;
+        if (nextVideo) {
+          setSharedVideo(nextVideo);
+          setPlayerAutoplay(nextVideo.status === 'playing');
+          setPlayerCurrentTime(nextVideo.currentTime ?? 0);
+          setPlayerRefreshToken((value) => value + 1);
+        }
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -246,6 +282,35 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
 
     await startVoiceRecording();
   };
+
+  useEffect(() => {
+    if (!sharedVideo?.videoId || sharedVideo.status !== 'playing') return;
+    const timer = window.setInterval(() => {
+      setPlayerCurrentTime((prev) => {
+        const next = prev + 1;
+        void pushVideoState('playing', next);
+        return next;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [sharedVideo?.videoId, sharedVideo?.status]);
+
+  useEffect(() => {
+    if (!sharedVideo?.videoId) return;
+    const timer = window.setInterval(() => {
+      void fetch(`/api/chats/${encodeURIComponent(chat.id)}/video`).then(async (response) => {
+        if (!response.ok) return;
+        const nextVideo = (await response.json()) as SharedVideoState | null;
+        if (!nextVideo?.videoId) return;
+        if ((nextVideo.status || 'paused') !== (sharedVideo.status || 'paused')) {
+          setPlayerAutoplay(nextVideo.status === 'playing');
+          setPlayerCurrentTime(nextVideo.currentTime ?? 0);
+          setPlayerRefreshToken((value) => value + 1);
+        }
+      }).catch(() => undefined);
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [chat.id, sharedVideo?.videoId, sharedVideo?.status]);
 
   const mood = useMemo(() => calculateChatMood(chat.messages), [chat.messages]);
   const otherMembers = members.filter((member) => member.id !== currentUser.id);
@@ -422,14 +487,16 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
             <div id={`youtube-player-shell-${chat.id}`} className="shared-video-player">
               {embedVideoUrl ? (
                 <iframe
-                  key={embedVideoUrl}
+                  key={`${embedVideoUrl}-${playerRefreshToken}`}
                   src={embedVideoUrl}
                   title={sharedVideo.title}
                   onError={() => {
-                    if (playerProvider === 'youtube-nocookie') {
-                      setPlayerProvider('youtube');
-                    } else if (playerProvider === 'youtube') {
+                    if (playerProvider === 'piped') {
                       setPlayerProvider('invidious');
+                    } else if (playerProvider === 'invidious') {
+                      setPlayerProvider('youtube-nocookie');
+                    } else if (playerProvider === 'youtube-nocookie') {
+                      setPlayerProvider('youtube');
                     }
                   }}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
