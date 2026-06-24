@@ -4,6 +4,7 @@ import { DeviceContext, getDeviceType } from './utils/device';
 import type { Chat, User, UserProfile } from './utils/data';
 import {
   addParticipants,
+  addReaction,
   createChat,
   deleteChat,
   deleteMessage,
@@ -13,6 +14,7 @@ import {
   loginWithGoogle,
   loginWithPhone,
   logout,
+  pinMessage,
   registerWithPhone,
   sendMessage,
   updateChat,
@@ -175,10 +177,23 @@ function App() {
     await refreshChats();
   };
 
-  const handleSendMessage = async (chatId: string, text: string, imageUrl?: string) => {
+  const handleSendMessage = async (chatId: string, text: string, imageUrl?: string, stickerUrl?: string, voiceUrl?: string) => {
     if (!currentUser) return;
-    await sendMessage(chatId, currentUser.id, text, imageUrl);
+    await sendMessage(chatId, currentUser.id, text, imageUrl, stickerUrl, voiceUrl);
     await refreshChats();
+  };
+
+  const handleAddReaction = async (messageId: string, emoji: string) => {
+    if (!currentUser) return;
+    const updated = await addReaction(messageId, currentUser.id, emoji);
+    if (!updated) return;
+    setChats((prev) => prev.map((chat) => (chat.id === activeChatId ? updated : chat)));
+  };
+
+  const handlePinMessage = async (chatId: string, messageId: string | null) => {
+    const updated = await pinMessage(chatId, messageId);
+    if (!updated) return;
+    setChats((prev) => prev.map((chat) => (chat.id === chatId ? updated : chat)));
   };
 
   const handleVoteDelete = async (chatId: string) => {
@@ -360,6 +375,8 @@ function App() {
                 onDeleteChat={handleDeleteChat}
                 onDeleteMessage={handleDeleteMessage}
                 onAddParticipants={handleAddParticipants}
+                onReact={handleAddReaction}
+                onPinMessage={handlePinMessage}
               />
             ) : (
               <div className="empty-state">Выберите чат или создайте новый</div>

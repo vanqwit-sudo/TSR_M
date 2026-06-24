@@ -273,8 +273,8 @@ app.post('/api/chats', async (req, res) => {
 });
 
 app.post('/api/messages', async (req, res) => {
-  const { chatId, senderId, text, imageUrl } = req.body;
-  if (!chatId || !senderId || (!text && !imageUrl)) return res.status(400).send('chatId, senderId и text/imageUrl обязательны');
+  const { chatId, senderId, text, imageUrl, stickerUrl, voiceUrl } = req.body;
+  if (!chatId || !senderId || (!text && !imageUrl && !stickerUrl && !voiceUrl)) return res.status(400).send('chatId, senderId и text/imageUrl/sticker/voice обязательны');
   const state = await loadState();
   const chat = getChatById(state, chatId);
   if (!chat) return res.status(404).send('Чат не найден');
@@ -284,11 +284,54 @@ app.post('/api/messages', async (req, res) => {
     senderId,
     text: text || '',
     imageUrl: imageUrl || undefined,
+    stickerUrl: stickerUrl || undefined,
+    voiceUrl: voiceUrl || undefined,
     createdAt: new Date().toISOString(),
   };
 
   chat.messages.push(message);
   chat.mood = getMood(chat.messages);
+  state.chats = state.chats.map((item) => (item.id === chatId ? chat : item));
+  await saveState(state);
+  res.json(chat);
+});
+
+app.post('/api/messages/:messageId/reactions', async (req, res) => {
+  const { messageId } = req.params;
+  const { userId, emoji } = req.body;
+  const state = await loadState();
+  let targetChat = null;
+  let targetMessage = null;
+
+  for (const chat of state.chats) {
+    const message = chat.messages.find((item) => item.id === messageId);
+    if (message) {
+      targetChat = chat;
+      targetMessage = message;
+      break;
+    }
+  }
+
+  if (!targetChat || !targetMessage) return res.status(404).send('Сообщение не найдено');
+  const nextReactions = { ...(targetMessage.reactions || {}) };
+  const users = new Set(nextReactions[emoji] || []);
+  if (users.has(userId)) users.delete(userId);
+  else users.add(userId);
+  nextReactions[emoji] = Array.from(users);
+  targetMessage.reactions = nextReactions;
+  targetChat.messages = targetChat.messages.map((item) => (item.id === messageId ? targetMessage : item));
+  state.chats = state.chats.map((item) => (item.id === targetChat.id ? targetChat : item));
+  await saveState(state);
+  res.json(targetChat);
+});
+
+app.post('/api/chats/:chatId/pin', async (req, res) => {
+  const { chatId } = req.params;
+  const { messageId } = req.body;
+  const state = await loadState();
+  const chat = getChatById(state, chatId);
+  if (!chat) return res.status(404).send('Чат не найден');
+  chat.pinnedMessageId = messageId || null;
   state.chats = state.chats.map((item) => (item.id === chatId ? chat : item));
   await saveState(state);
   res.json(chat);
@@ -419,6 +462,17 @@ app.get('/api/search/chats', async (req, res) => {
       return chat.title.toLowerCase().includes(query) || memberNames.toLowerCase().includes(query);
     }),
   );
+});
+
+app.get('/api/search/messages', async (req, res) => {
+  const chatId = String(req.query.chatId || '');
+  const query = String(req.query.query || '').toLowerCase().trim();
+  if (!chatId) return res.status(400).send('chatId обязателен');
+  const state = await loadState();
+  const chat = getChatById(state, chatId);
+  if (!chat) return res.status(404).send('Чат не найден');
+  if (!query) return res.json(chat.messages);
+  res.json(chat.messages.filter((message) => message.text.toLowerCase().includes(query)));
 });
 
 app.use(express.static(DIST_PATH));

@@ -22,6 +22,9 @@ export interface Message {
   senderId: string;
   text: string;
   imageUrl?: string;
+  stickerUrl?: string;
+  voiceUrl?: string;
+  reactions?: Record<string, string[]>;
   createdAt: string;
   deletedFor?: string[];
 }
@@ -36,6 +39,7 @@ export interface Chat {
   avatarUrl?: string;
   creatorId?: string;
   deleteVotes?: string[];
+  pinnedMessageId?: string | null;
 }
 
 export interface AppState {

@@ -1,4 +1,4 @@
-import type { Chat, User, UserProfile } from './data';
+import type { Chat, Message, User, UserProfile } from './data';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 const USER_STORAGE_KEY = 'tsr_m_current_user_id';
@@ -114,10 +114,24 @@ export async function createChat(title: string, participantUsernames: string[], 
   });
 }
 
-export async function sendMessage(chatId: string, senderId: string, text: string, imageUrl?: string): Promise<Chat | null> {
+export async function sendMessage(chatId: string, senderId: string, text: string, imageUrl?: string, stickerUrl?: string, voiceUrl?: string): Promise<Chat | null> {
   return fetchJson<Chat>('/api/messages', {
     method: 'POST',
-    body: JSON.stringify({ chatId, senderId, text, imageUrl }),
+    body: JSON.stringify({ chatId, senderId, text, imageUrl, stickerUrl, voiceUrl }),
+  });
+}
+
+export async function addReaction(messageId: string, userId: string, emoji: string): Promise<Chat | null> {
+  return fetchJson<Chat>(`/api/messages/${encodeURIComponent(messageId)}/reactions`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, emoji }),
+  });
+}
+
+export async function pinMessage(chatId: string, messageId: string | null): Promise<Chat | null> {
+  return fetchJson<Chat>(`/api/chats/${encodeURIComponent(chatId)}/pin`, {
+    method: 'POST',
+    body: JSON.stringify({ messageId }),
   });
 }
 
@@ -162,4 +176,8 @@ export async function searchUsers(query: string): Promise<User[]> {
 
 export async function searchChats(query: string, userId: string): Promise<Chat[]> {
   return fetchJson<Chat[]>(`/api/search/chats?userId=${encodeURIComponent(userId)}&query=${encodeURIComponent(query)}`);
+}
+
+export async function searchMessages(chatId: string, query: string): Promise<Message[]> {
+  return fetchJson<Message[]>(`/api/search/messages?chatId=${encodeURIComponent(chatId)}&query=${encodeURIComponent(query)}`);
 }

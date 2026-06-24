@@ -763,19 +763,89 @@ button:focus {
 }
 
 .message-input {
-  display: grid;
-  grid-template-columns: 1fr auto;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   padding: 18px 22px 22px;
   background: var(--surface);
   border-top: 1px solid var(--border);
 }
 
+.composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.sticker-button {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.sticker-button img {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
 .image-preview {
-  grid-column: 1 / -1;
   width: min(220px, 100%);
   border-radius: 16px;
   object-fit: cover;
+}
+
+.voice-preview {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #ecfeff;
+  color: #0f766e;
+  width: fit-content;
+}
+
+.voice-message {
+  width: min(260px, 100%);
+  margin-top: 4px;
+}
+
+.search-panel {
+  padding: 12px 18px 0;
+}
+
+.search-panel input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.reaction-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.reaction-pill,
+.reaction-badge {
+  border: none;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(124, 58, 237, 0.12);
+  color: #4c1d95;
+  font-size: 0.85rem;
+}
+
+.reaction-badge {
+  background: rgba(16, 185, 129, 0.14);
+  color: #047857;
 }
 
 .upload-button {
