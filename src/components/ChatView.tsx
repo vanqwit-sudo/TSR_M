@@ -34,6 +34,8 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
   const [participantInput, setParticipantInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeView, setActiveView] = useState<'chat' | 'search'>('chat');
+  const [activeReactionMessageId, setActiveReactionMessageId] = useState<string | null>(null);
+  const [showGifPicker, setShowGifPicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const mood = useMemo(() => calculateChatMood(chat.messages), [chat.messages]);
@@ -86,6 +88,13 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
   };
 
   const quickStickers = ['https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif', 'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif'];
+  const gifOptions = [
+    'https://media.giphy.com/media/3o7aD2saalBwwftBIY/giphy.gif',
+    'https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif',
+    'https://media.giphy.com/media/26xBI73gWquCBBCDe/giphy.gif',
+    'https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif',
+  ];
+  const reactionOptions = ['👍', '❤️', '😂', '🔥', '🎉', '🙏'];
 
   const handleVoiceNote = () => {
     if (voicePreview) {
@@ -193,14 +202,21 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
                     {isMine ? <span className="message-state">✓</span> : null}
                   </div>
                   <div className="reaction-row">
-                    {['👍', '❤️', '🔥'].map((emoji) => (
-                      <button key={emoji} type="button" className="reaction-pill" onClick={() => onReact(message.id, emoji)}>
-                        {emoji}
-                      </button>
-                    ))}
+                    <button type="button" className="reaction-pill" onClick={() => setActiveReactionMessageId(activeReactionMessageId === message.id ? null : message.id)}>
+                      +
+                    </button>
                     {message.reactions && Object.entries(message.reactions).map(([emoji, users]) => (
                       <span key={emoji} className="reaction-badge">{emoji} {users.length}</span>
                     ))}
+                    {activeReactionMessageId === message.id ? (
+                      <div className="reaction-picker">
+                        {reactionOptions.map((emoji) => (
+                          <button key={emoji} type="button" className="reaction-pill" onClick={() => { onReact(message.id, emoji); setActiveReactionMessageId(null); }}>
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -225,18 +241,25 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
         {voicePreview ? <div className="voice-preview">Голосовое сообщение готово</div> : null}
         <textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Напишите сообщение..." />
         <div className="composer-actions">
-          {quickStickers.map((sticker) => (
-            <button key={sticker} type="button" className="sticker-button" onClick={() => setPendingSticker(sticker)}>
-              <img src={sticker} alt="sticker" />
-            </button>
-          ))}
+          <button type="button" className="secondary-button" onClick={() => setShowGifPicker((prev) => !prev)}>
+            GIF
+          </button>
           <button type="button" className="secondary-button" onClick={handleVoiceNote}>{voicePreview ? 'Сброс' : 'Голосовое'}</button>
           <label className="upload-button">
             Фото
             <input type="file" accept="image/*" onChange={handleImagePick} />
           </label>
-          <button type="button" onClick={handleSend}>Отправить</button>
+          <button type="button" className="primary-button" onClick={handleSend}>Отправить</button>
         </div>
+        {showGifPicker ? (
+          <div className="gif-picker">
+            {gifOptions.map((gif) => (
+              <button key={gif} type="button" className="gif-card" onClick={() => { setPendingSticker(gif); setShowGifPicker(false); }}>
+                <img src={gif} alt="gif" />
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {showProfilePanel && selectedProfile && (
@@ -268,35 +291,50 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
               <h3>Настройки группы</h3>
               <button type="button" className="secondary-button" onClick={() => setShowGroupSettings(false)}>Закрыть</button>
             </div>
-            <label>
-              Название
-              <input value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} />
-            </label>
-            <label>
-              Аватарка
-              <input value={groupAvatarUrl} onChange={(e) => setGroupAvatarUrl(e.target.value)} placeholder="URL или файл" />
-              <input type="file" accept="image/*" onChange={handleGroupAvatarPick} />
-            </label>
-            <label>
-              Добавить пользователей (через запятую)
-              <input value={participantInput} onChange={(e) => setParticipantInput(e.target.value)} placeholder="@friend,@hero" />
-            </label>
-            <div className="overlay-actions">
-              <button type="button" className="secondary-button" onClick={addParticipantsToGroup}>Добавить</button>
-              <button type="button" className="primary-button" onClick={saveGroupSettings}>Сохранить</button>
+            <div className="group-settings-stack">
+              <div className="group-settings-section">
+                <div className="group-settings-section-title">Название</div>
+                <input value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} placeholder="Введите название" />
+              </div>
+              <div className="group-settings-section">
+                <div className="group-settings-section-title">Аватарка</div>
+                <div className="group-settings-avatar-row">
+                  <div className="group-settings-avatar-preview">
+                    {groupAvatarUrl ? <img src={groupAvatarUrl} alt="group avatar" /> : <div className="avatar-fallback">{title[0] ?? '?'}</div>}
+                  </div>
+                  <div className="group-settings-avatar-actions">
+                    <input value={groupAvatarUrl} onChange={(e) => setGroupAvatarUrl(e.target.value)} placeholder="URL или файл" />
+                    <label className="upload-button group-upload-button">
+                      Загрузить файл
+                      <input type="file" accept="image/*" onChange={handleGroupAvatarPick} />
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div className="group-settings-section">
+                <div className="group-settings-section-title">Добавить участников</div>
+                <input value={participantInput} onChange={(e) => setParticipantInput(e.target.value)} placeholder="@friend,@hero" />
+                <div className="overlay-actions">
+                  <button type="button" className="secondary-button" onClick={addParticipantsToGroup}>Добавить</button>
+                </div>
+              </div>
+              <div className="group-settings-section">
+                <div className="group-settings-section-title">Участники</div>
+                <div className="group-members-list">
+                  {members.map((member) => (
+                    <div key={member.id} className="group-member-item">
+                      <Avatar src={member.avatarUrl} alt={member.displayName} name={member.displayName} size={40} />
+                      <span>{member.displayName}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="group-admin-row">
+            <div className="overlay-actions overlay-actions-stacked">
+              <button type="button" className="primary-button" onClick={saveGroupSettings}>Сохранить</button>
               <button type="button" className="danger-button" onClick={handleDeleteGroup} disabled={!canManageGroup}>
                 {canManageGroup ? 'Удалить группу' : 'Только админ'}
               </button>
-            </div>
-            <div className="group-members-list">
-              {members.map((member) => (
-                <div key={member.id} className="group-member-item">
-                  <Avatar src={member.avatarUrl} alt={member.displayName} name={member.displayName} size={40} />
-                  <span>{member.displayName}</span>
-                </div>
-              ))}
             </div>
           </div>
         </div>

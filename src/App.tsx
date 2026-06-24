@@ -198,7 +198,9 @@ function App() {
     if (existing) {
       setActiveChatId(existing.id);
       setProfileViewerUser(null);
-      setSidebarOpen(false);
+      if (typeof window !== 'undefined' && window.innerWidth <= 760) {
+        setSidebarOpen(false);
+      }
       return;
     }
 
@@ -215,7 +217,9 @@ function App() {
     setChats((prev) => [created, ...prev]);
     setActiveChatId(created.id);
     setShowCreateChat(false);
-    setSidebarOpen(false);
+    if (typeof window !== 'undefined' && window.innerWidth <= 760) {
+      setSidebarOpen(false);
+    }
   };
 
   const handleSendMessage = async (chatId: string, text: string, imageUrl?: string, stickerUrl?: string, voiceUrl?: string) => {
@@ -283,13 +287,14 @@ function App() {
   const filteredChats = useMemo(() => {
     if (!currentUser) return chats;
     if (!search.trim()) return chats;
-    const query = search.toLowerCase();
+    const query = search.toLowerCase().trim().replace(/^@/, '');
     return chats.filter((chat) => {
-      const usersText = chat.members
-        .map((memberId) => users.find((user) => user.id === memberId)?.username ?? '')
-        .join(' ')
-        .toLowerCase();
-      return chat.title.toLowerCase().includes(query) || usersText.includes(query);
+      const userNames = chat.members
+        .map((memberId) => users.find((user) => user.id === memberId))
+        .filter(Boolean)
+        .map((user) => `${user!.username} ${user!.displayName} ${user!.bio}`.toLowerCase())
+        .join(' ');
+      return chat.title.toLowerCase().includes(query) || userNames.includes(query) || userNames.replace(/@/g, '').includes(query);
     });
   }, [search, chats, users, currentUser]);
 
@@ -298,17 +303,17 @@ function App() {
       return filteredChats;
     }
 
-    const query = search.toLowerCase().trim();
+    const query = search.toLowerCase().trim().replace(/^@/, '');
     if (!query) {
       return users;
     }
 
-    return users.filter(
-      (user) =>
-        user.username.toLowerCase().includes(query) ||
-        user.displayName.toLowerCase().includes(query) ||
-        user.bio.toLowerCase().includes(query),
-    );
+    return users.filter((user) => {
+      const searchableText = [user.username, user.displayName, user.bio, user.username.replace(/^@/, '')]
+        .join(' ')
+        .toLowerCase();
+      return searchableText.includes(query);
+    });
   }, [searchMode, search, filteredChats, users]);
 
   const activeChatMembers = useMemo(
@@ -341,7 +346,7 @@ function App() {
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>
       <DeviceContext.Provider value={device}>
-        <div className={`app ${theme}`} style={appStyle.app}>
+        <div className={`app ${theme} ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={appStyle.app}>
           <button
             type="button"
             className={`sidebar-toggle-pill ${sidebarOpen ? 'open' : 'closed'}`}
@@ -409,9 +414,27 @@ function App() {
                 </div>
                 <div className="chat-selector-list">
                   {searchMode === 'users' ? (
-                    <UserList users={userResults} onSelectUser={setProfileViewerUser} />
+                    <UserList
+                    users={userResults}
+                    onSelectUser={(user) => {
+                      setProfileViewerUser(user);
+                      if (typeof window !== 'undefined' && window.innerWidth <= 760) {
+                        setSidebarOpen(false);
+                      }
+                    }}
+                  />
                   ) : (
-                    <ChatList chats={chatResults} users={users} activeId={activeChatId} onSelect={setActiveChatId} />
+                    <ChatList
+                      chats={chatResults}
+                      users={users}
+                      activeId={activeChatId}
+                      onSelect={(id) => {
+                        setActiveChatId(id);
+                        if (typeof window !== 'undefined' && window.innerWidth <= 760) {
+                          setSidebarOpen(false);
+                        }
+                      }}
+                    />
                   )}
                 </div>
               </div>

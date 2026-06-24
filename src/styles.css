@@ -91,7 +91,10 @@ button:focus {
 }
 
 @media (max-width: 760px) {
-  .app { position: relative; }
+  .app {
+    position: relative;
+    overflow: hidden;
+  }
   .left-rail {
     position: fixed;
     left: 0;
@@ -100,11 +103,36 @@ button:focus {
     z-index: 30;
     width: min(92vw, 320px);
     min-width: min(92vw, 320px);
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(.2,.8,.2,1);
     box-shadow: 0 30px 80px rgba(15, 23, 42, 0.2);
   }
-  .sidebar-toggle-pill { top: 14px; left: 14px; }
-  .sidebar-toggle-pill.open { transform: translateX(min(92vw, 320px) - 22px); }
-  .chat-panel { height: 100vh; }
+  .app.sidebar-open .left-rail {
+    transform: translateX(0);
+  }
+  .sidebar-toggle-pill {
+    top: 14px;
+    right: 14px;
+    left: auto;
+    z-index: 45;
+  }
+  .sidebar-toggle-pill.open {
+    transform: translateX(0);
+  }
+  .chat-panel {
+    height: 100dvh;
+    padding-top: 68px;
+    transition: transform 0.28s cubic-bezier(.2,.8,.2,1), opacity 0.2s ease;
+  }
+  .app.sidebar-open .chat-panel {
+    transform: translateX(min(92vw, 320px));
+    opacity: 0.62;
+    pointer-events: none;
+  }
+  .sidebar-panel-content,
+  .chat-selector-panel {
+    padding-top: 74px;
+  }
 }
 
 .sidebar-toggle-pill {
@@ -724,6 +752,69 @@ button:focus {
   margin-top: 16px;
 }
 
+.overlay-actions-stacked {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-top: 18px;
+}
+
+.group-settings-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.group-settings-section {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface-alt);
+}
+
+.group-settings-section-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+}
+
+.group-settings-avatar-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.group-settings-avatar-preview {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.16), rgba(34, 211, 238, 0.14));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.group-settings-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.group-settings-avatar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.group-upload-button {
+  min-height: 38px;
+  padding: 0 12px;
+  justify-content: center;
+}
+
 .profile-preview-card {
   display: flex;
   gap: 16px;
@@ -1054,7 +1145,9 @@ button:focus {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
   margin-top: 8px;
+  position: relative;
 }
 
 .reaction-pill,
@@ -1065,6 +1158,27 @@ button:focus {
   background: rgba(124, 58, 237, 0.12);
   color: #4c1d95;
   font-size: 0.85rem;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.reaction-pill:hover {
+  transform: translateY(-1px);
+  background: rgba(124, 58, 237, 0.2);
+}
+
+.reaction-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 6;
 }
 
 .reaction-badge {
@@ -1076,8 +1190,9 @@ button:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 18px;
+  border-radius: 999px;
   padding: 0 16px;
+  min-height: 42px;
   background: #eef2ff;
   color: #4338ca;
   cursor: pointer;
@@ -1085,6 +1200,32 @@ button:focus {
 
 .upload-button input {
   display: none;
+}
+
+.gif-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface-alt);
+}
+
+.gif-card {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+.gif-card img {
+  width: 100%;
+  height: 72px;
+  object-fit: cover;
+  display: block;
 }
 
 .message-actions-sheet {
