@@ -301,11 +301,17 @@ function App() {
     <ThemeContext.Provider value={{ theme, setTheme }}>
       <DeviceContext.Provider value={device}>
         <div className={`app ${theme}`} style={appStyle.app}>
+          <button
+            type="button"
+            className={`sidebar-toggle-pill ${sidebarOpen ? 'open' : 'closed'}`}
+            onClick={() => setSidebarOpen((prev) => !prev)}
+            aria-label={sidebarOpen ? 'Скрыть меню' : 'Открыть меню'}
+          >
+            TSR_M
+          </button>
           <aside className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`} style={appStyle.sidebar}>
             <div className="sidebar-topbar">
-              <button type="button" className="brand brand-button" onClick={() => setSidebarOpen((prev) => !prev)}>
-                TSR_M
-              </button>
+              <div className="brand">TSR_M</div>
               <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="theme-toggle">
                 {theme === 'light' ? 'Тёмная тема' : 'Светлая тема'}
               </button>

@@ -92,6 +92,8 @@ button:focus {
 
 @media (max-width: 760px) {
   .app { position: relative; }
+  .sidebar-toggle-pill { top: 14px; left: 14px; }
+  .sidebar-toggle-pill.open { transform: translateX(min(92vw, 320px) - 22px); }
   .sidebar {
     position: fixed;
     left: 0;
@@ -104,8 +106,34 @@ button:focus {
   }
   .sidebar.closed {
     transform: translateX(-100%);
+    opacity: 0;
   }
   .chat-panel { height: 100vh; }
+}
+
+.sidebar-toggle-pill {
+  position: fixed;
+  top: 18px;
+  left: 18px;
+  z-index: 40;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  color: white;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 12px 30px rgba(124, 58, 237, 0.24);
+  transition: transform 0.28s cubic-bezier(.2,.8,.2,1), opacity 0.22s ease, background 0.2s ease;
+}
+
+.sidebar-toggle-pill.closed {
+  transform: translateX(0);
+}
+
+.sidebar-toggle-pill.open {
+  transform: translateX(280px);
 }
 
 .sidebar {
@@ -115,16 +143,20 @@ button:focus {
   color: var(--text);
   width: 360px;
   min-width: 360px;
-  transition: transform 0.24s ease, width 0.24s ease, min-width 0.24s ease, padding 0.24s ease;
+  transition: transform 0.32s cubic-bezier(.2,.8,.2,1), width 0.32s cubic-bezier(.2,.8,.2,1), min-width 0.32s cubic-bezier(.2,.8,.2,1), padding 0.32s cubic-bezier(.2,.8,.2,1), opacity 0.22s ease;
   flex-shrink: 0;
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .sidebar.closed {
   width: 0;
   min-width: 0;
   padding: 0;
+  opacity: 0;
   overflow: hidden;
-  transform: translateX(-8px);
+  transform: translateX(-14px);
+  pointer-events: none;
 }
 
 .sidebar-topbar {
