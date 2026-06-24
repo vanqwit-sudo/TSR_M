@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STATE_PATH = path.join(__dirname, 'server-state.json');
+const BACKUP_STATE_PATH = path.join(__dirname, 'server-state.backup.json');
 const DIST_PATH = path.join(__dirname, 'dist');
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4174;
 
@@ -13,6 +14,14 @@ const defaultState = {
   users: [],
   chats: [],
 };
+
+function normalizeState(state) {
+  const safeState = state && typeof state === 'object' ? state : {};
+  return {
+    users: Array.isArray(safeState.users) ? safeState.users : [],
+    chats: Array.isArray(safeState.chats) ? safeState.chats : [],
+  };
+}
 
 const app = express();
 app.use(cors());
@@ -43,17 +52,31 @@ function classifyEmoji(text) {
 }
 
 async function loadState() {
-  try {
-    const raw = await fs.readFile(STATE_PATH, 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    await saveState(defaultState);
-    return JSON.parse(JSON.stringify(defaultState));
+  const candidates = [STATE_PATH, process.env.STATE_PATH ? path.resolve(process.env.STATE_PATH) : null, BACKUP_STATE_PATH].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      const raw = await fs.readFile(candidate, 'utf8');
+      const parsed = JSON.parse(raw);
+      const normalized = normalizeState(parsed);
+      if (candidate !== STATE_PATH) {
+        await saveState(normalized);
+      }
+      return normalized;
+    } catch {
+      // continue to the next candidate
+    }
   }
+
+  await saveState(defaultState);
+  return JSON.parse(JSON.stringify(defaultState));
 }
 
 async function saveState(state) {
-  await fs.writeFile(STATE_PATH, JSON.stringify(state, null, 2), 'utf8');
+  const normalized = normalizeState(state);
+  await fs.mkdir(path.dirname(STATE_PATH), { recursive: true });
+  await fs.writeFile(STATE_PATH, JSON.stringify(normalized, null, 2), 'utf8');
+  await fs.writeFile(BACKUP_STATE_PATH, JSON.stringify(normalized, null, 2), 'utf8');
 }
 
 function getUserById(state, userId) {
@@ -70,6 +93,35 @@ function getMood(messages) {
 
 function deleteThreshold(chat) {
   return chat.isGroup ? Math.floor(chat.members.length / 2) + 1 : chat.members.length;
+}
+
+function parseWatchCommand(text) {
+  const normalized = String(text || '').trim();
+  const match = normalized.match(/^!смотреть\s+"([^"]+)"\s+"([^"]+)"$/i);
+  if (!match) return null;
+  return { channel: match[1].trim(), title: match[2].trim() };
+}
+
+async function searchYouTubeVideo(query) {
+  const proxyUrl = process.env.YOUTUBE_PROXY_URL || 'https://vid.puffyan.us/api/v1/search';
+  const endpoint = `${proxyUrl}?q=${encodeURIComponent(query)}&type=video&sort_by=relevance&region=US`;
+  const response = await fetch(endpoint, {
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = await response.json();
+  const firstVideo = Array.isArray(data) ? data[0] : data?.videos?.[0] || data?.results?.[0] || null;
+  if (!firstVideo) return null;
+
+  return {
+    videoId: firstVideo.videoId || firstVideo.video_id || firstVideo.id || null,
+    title: firstVideo.title || 'YouTube video',
+    channel: firstVideo.author || firstVideo.channel || 'YouTube',
+  };
 }
 
 app.get('/api/users', async (req, res) => {
@@ -206,10 +258,32 @@ app.post('/api/messages', async (req, res) => {
   const chat = getChatById(state, chatId);
   if (!chat) return res.status(404).send('Чат не найден');
 
+  const normalizedText = String(text || '').trim();
+  const watchCommand = parseWatchCommand(normalizedText);
+  let sharedVideo = chat.sharedVideo || null;
+
+  if (watchCommand) {
+    const video = await searchYouTubeVideo(`${watchCommand.channel} ${watchCommand.title}`);
+    const sender = getUserById(state, senderId);
+    sharedVideo = video
+      ? {
+          videoId: video.videoId,
+          title: video.title,
+          channel: video.channel,
+          startedBy: sender?.displayName || 'участник',
+        }
+      : {
+          videoId: `${watchCommand.channel}-${watchCommand.title}`.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          title: watchCommand.title,
+          channel: watchCommand.channel,
+          startedBy: sender?.displayName || 'участник',
+        };
+  }
+
   const message = {
     id: `${chatId}-${chat.messages.length + 1}`,
     senderId,
-    text: text || '',
+    text: normalizedText,
     imageUrl: imageUrl || undefined,
     stickerUrl: stickerUrl || undefined,
     voiceUrl: voiceUrl || undefined,
@@ -218,6 +292,9 @@ app.post('/api/messages', async (req, res) => {
 
   chat.messages.push(message);
   chat.mood = getMood(chat.messages);
+  if (watchCommand) {
+    chat.sharedVideo = sharedVideo;
+  }
   state.chats = state.chats.map((item) => (item.id === chatId ? chat : item));
   await saveState(state);
   res.json(chat);

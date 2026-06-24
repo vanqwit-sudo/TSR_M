@@ -40,6 +40,10 @@ async function resizeAvatar(file: File, size: number) {
 export default function ProfileEditor({ profile, onUpdate }: Props) {
   const [local, setLocal] = useState(profile);
 
+  useEffect(() => {
+    setLocal(profile);
+  }, [profile]);
+
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -62,84 +66,77 @@ export default function ProfileEditor({ profile, onUpdate }: Props) {
 
   return (
     <div className="profile-editor">
-      <div className="profile-preview">
+      <div className="profile-preview-card">
         <div className="avatar-wrapper">
           <Avatar className="avatar" src={local.avatarUrl} alt="Аватар" name={local.displayName} size={96} />
           <div className="status-badge">{local.statusEmoji}</div>
           <div className="avatar-frame" style={{ borderColor: local.borderColor }} />
         </div>
-        <div className="profile-name" style={{ color: local.nameColor }}>
-          {local.displayName}
+        <div className="profile-preview-copy">
+          <div className="profile-name" style={{ color: local.nameColor }}>
+            {local.displayName}
+          </div>
+          <div className="profile-preview-username">{local.username}</div>
+          <div className="profile-preview-bio">{local.bio || 'Добавьте описание, чтобы профиль выглядел живее.'}</div>
         </div>
       </div>
-      <label>
-        Аватар
-        <input type="file" accept="image/*" onChange={handleFileChange} />
-      </label>
-      <label>
-        Никнейм
-        <input
-          value={local.username}
-          onChange={(e) => setLocal({ ...local, username: e.target.value })}
-        />
-      </label>
-      <label>
-        Имя
-        <input
-          value={local.displayName}
-          onChange={(e) => setLocal({ ...local, displayName: e.target.value })}
-        />
-      </label>
-      <label>
-        Описание
-        <textarea
-          value={local.bio}
-          onChange={(e) => setLocal({ ...local, bio: e.target.value })}
-        />
-      </label>
-      <label>
-        Эмодзи-статус
-        <input
-          value={local.statusEmoji}
-          onChange={(e) => setLocal({ ...local, statusEmoji: e.target.value })}
-        />
-      </label>
-      <label>
-        Цвет рамки
-        <input
-          type="color"
-          value={local.borderColor}
-          onChange={(e) => setLocal({ ...local, borderColor: e.target.value })}
-        />
-      </label>
-      <label>
-        Цвет имени
-        <input
-          type="color"
-          value={local.nameColor}
-          onChange={(e) => setLocal({ ...local, nameColor: e.target.value })}
-        />
-      </label>
-      <label className="sync-toggle">
-        <input
-          type="checkbox"
-          checked={Boolean((local as UserProfile & { syncWithServer?: boolean }).syncWithServer)}
-          onChange={(e) => setLocal({ ...local, syncWithServer: e.target.checked } as UserProfile & { syncWithServer?: boolean })}
-        />
-        Синхронизировать профиль с сервером
-      </label>
-      <div className="colors-grid">
-        {defaultFrames.map((color) => (
-          <button
-            key={color}
-            type="button"
-            className="color-swatch"
-            style={{ backgroundColor: color }}
-            onClick={() => setLocal({ ...local, borderColor: color })}
-          />
-        ))}
+
+      <div className="profile-editor-section">
+        <label className="profile-editor-field">
+          <span>Аватар</span>
+          <input type="file" accept="image/*" onChange={handleFileChange} />
+        </label>
+        <label className="profile-editor-field">
+          <span>Никнейм</span>
+          <input value={local.username} onChange={(e) => setLocal({ ...local, username: e.target.value })} />
+        </label>
+        <label className="profile-editor-field">
+          <span>Имя</span>
+          <input value={local.displayName} onChange={(e) => setLocal({ ...local, displayName: e.target.value })} />
+        </label>
+        <label className="profile-editor-field">
+          <span>Описание</span>
+          <textarea value={local.bio} onChange={(e) => setLocal({ ...local, bio: e.target.value })} />
+        </label>
+        <label className="profile-editor-field">
+          <span>Эмодзи-статус</span>
+          <input value={local.statusEmoji} onChange={(e) => setLocal({ ...local, statusEmoji: e.target.value })} />
+        </label>
       </div>
-      <button type="button" onClick={() => onUpdate(local)}>
+
+      <div className="profile-editor-section compact">
+        <div className="profile-editor-inline-fields">
+          <label className="profile-editor-field">
+            <span>Цвет рамки</span>
+            <input type="color" value={local.borderColor} onChange={(e) => setLocal({ ...local, borderColor: e.target.value })} />
+          </label>
+          <label className="profile-editor-field">
+            <span>Цвет имени</span>
+            <input type="color" value={local.nameColor} onChange={(e) => setLocal({ ...local, nameColor: e.target.value })} />
+          </label>
+        </div>
+        <label className="sync-toggle">
+          <input
+            type="checkbox"
+            checked={Boolean((local as UserProfile & { syncWithServer?: boolean }).syncWithServer)}
+            onChange={(e) => setLocal({ ...local, syncWithServer: e.target.checked } as UserProfile & { syncWithServer?: boolean })}
+          />
+          Синхронизировать профиль с сервером
+        </label>
+        <div className="colors-grid">
+          {defaultFrames.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className="color-swatch"
+              style={{ backgroundColor: color }}
+              onClick={() => setLocal({ ...local, borderColor: color })}
+            />
+          ))}
+        </div>
+      </div>
+
+      <button type="button" className="profile-save-button" onClick={() => onUpdate(local)}>
         Сохранить профиль
       </button>
     </div>

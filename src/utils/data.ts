@@ -29,6 +29,13 @@ export interface Message {
   deletedFor?: string[];
 }
 
+export interface SharedVideoState {
+  videoId: string;
+  title: string;
+  channel: string;
+  startedBy: string;
+}
+
 export interface Chat {
   id: string;
   title: string;
@@ -40,6 +47,7 @@ export interface Chat {
   creatorId?: string;
   deleteVotes?: string[];
   pinnedMessageId?: string | null;
+  sharedVideo?: SharedVideoState | null;
 }
 
 export interface AppState {

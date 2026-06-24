@@ -442,19 +442,35 @@ function App() {
           </div>
           <main className="chat-panel" style={appStyle.chatPanel}>
             {activeChat ? (
-              <ChatView
-                chat={activeChat}
-                currentUser={currentUser}
-                members={activeChatMembers}
-                onSend={handleSendMessage}
-                onVoteDelete={handleVoteDelete}
-                onUpdateChat={handleUpdateChat}
-                onDeleteChat={handleDeleteChat}
-                onDeleteMessage={handleDeleteMessage}
-                onAddParticipants={handleAddParticipants}
-                onReact={handleAddReaction}
-                onPinMessage={handlePinMessage}
-              />
+              <>
+                <div className="mobile-chat-header">
+                  <button type="button" className="mobile-chat-back" onClick={() => setSidebarOpen(true)}>
+                    ☰
+                  </button>
+                  <div className="mobile-chat-header-copy">
+                    <div className="mobile-chat-title">{activeChat.title}</div>
+                    <div className="mobile-chat-subtitle">{activeChat.isGroup ? `${activeChat.members.length} участников` : 'Переписка'}</div>
+                  </div>
+                  <button type="button" className="mobile-chat-action" onClick={() => setShowCreateChat(true)}>
+                    +
+                  </button>
+                </div>
+                <div className="chat-shell">
+                  <ChatView
+                    chat={activeChat}
+                    currentUser={currentUser}
+                    members={activeChatMembers}
+                    onSend={handleSendMessage}
+                    onVoteDelete={handleVoteDelete}
+                    onUpdateChat={handleUpdateChat}
+                    onDeleteChat={handleDeleteChat}
+                    onDeleteMessage={handleDeleteMessage}
+                    onAddParticipants={handleAddParticipants}
+                    onReact={handleAddReaction}
+                    onPinMessage={handlePinMessage}
+                  />
+                </div>
+              </>
             ) : (
               <div className="empty-state-card">
                 <div className="empty-state-title">Начните общение</div>

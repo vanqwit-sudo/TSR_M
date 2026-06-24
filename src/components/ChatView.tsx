@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useMemo, useRef, useState, type ChangeEvent, useEffect } from 'react';
+import type { SharedVideoState } from '../utils/data';
 
 const deleteSound = typeof window !== 'undefined' ? new Audio('/sounds/shot.mp3') : null;
 import type { Chat, User } from '../utils/data';
@@ -36,7 +37,77 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
   const [activeView, setActiveView] = useState<'chat' | 'search'>('chat');
   const [activeReactionMessageId, setActiveReactionMessageId] = useState<string | null>(null);
   const [showGifPicker, setShowGifPicker] = useState(false);
+  const [sharedVideo, setSharedVideo] = useState<SharedVideoState | null>(chat.sharedVideo ?? null);
+  const [playerReady, setPlayerReady] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const playerRef = useRef<any>(null);
+
+  useEffect(() => {
+    setSharedVideo(chat.sharedVideo ?? null);
+    setPlayerReady(false);
+  }, [chat.sharedVideo]);
+
+  useEffect(() => {
+    if (!sharedVideo?.videoId) return;
+
+    const loadPlayer = () => {
+      const iframeId = `youtube-player-${chat.id}`;
+      const existing = document.getElementById(iframeId);
+      if (existing) existing.remove();
+      const container = document.getElementById(`youtube-player-shell-${chat.id}`);
+      if (!container) return;
+      const yt = (window as Window & { YT?: any }).YT;
+      if (!yt?.Player) return;
+      playerRef.current = new yt.Player(iframeId, {
+        videoId: sharedVideo.videoId,
+        host: 'https://www.youtube-nocookie.com',
+        playerVars: { autoplay: 1, rel: 0 },
+        events: {
+          onReady: () => setPlayerReady(true),
+        },
+      });
+    };
+
+    if ((window as Window & { YT?: any }).YT?.Player) {
+      loadPlayer();
+      return;
+    }
+
+    const existingScript = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+    if (!existingScript) {
+      const script = document.createElement('script');
+      script.src = 'https://www.youtube.com/iframe_api';
+      script.async = true;
+      document.body.appendChild(script);
+    }
+
+    const ready = (window as Window & { onYouTubeIframeAPIReady?: () => void }).onYouTubeIframeAPIReady;
+    (window as Window & { onYouTubeIframeAPIReady?: () => void }).onYouTubeIframeAPIReady = () => {
+      loadPlayer();
+    };
+
+    if ((window as Window & { YT?: any }).YT?.Player) {
+      loadPlayer();
+    }
+
+    return () => {
+      (window as Window & { onYouTubeIframeAPIReady?: () => void }).onYouTubeIframeAPIReady = ready;
+    };
+  }, [chat.id, sharedVideo?.videoId]);
+
+  const playVideo = () => {
+    if (playerRef.current?.playVideo) playerRef.current.playVideo();
+  };
+
+  const pauseVideo = () => {
+    if (playerRef.current?.pauseVideo) playerRef.current.pauseVideo();
+  };
+
+  const seekVideo = (seconds: number) => {
+    if (playerRef.current?.seekTo) {
+      playerRef.current.seekTo(playerRef.current.getCurrentTime() + seconds, true);
+    }
+  };
 
   const mood = useMemo(() => calculateChatMood(chat.messages), [chat.messages]);
   const otherMembers = members.filter((member) => member.id !== currentUser.id);
@@ -47,11 +118,13 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
 
   const handleSend = () => {
     if (!draft.trim() && !pendingImage && !pendingSticker && !voicePreview) return;
-    onSend(chat.id, draft.trim(), pendingImage ?? undefined, pendingSticker ?? undefined, voicePreview ?? undefined);
+    const normalized = draft.trim();
+    onSend(chat.id, normalized, pendingImage ?? undefined, pendingSticker ?? undefined, voicePreview ?? undefined);
     setDraft('');
     setPendingImage(null);
     setPendingSticker(null);
     setVoicePreview(null);
+    setShowGifPicker(false);
   };
 
   const currentVoteCount = chat.deleteVotes?.length ?? 0;
@@ -69,6 +142,7 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     const reader = new FileReader();
     reader.onload = () => setPendingImage(String(reader.result));
     reader.readAsDataURL(file);
+    event.target.value = '';
   };
 
   const handleGroupAvatarPick = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -175,6 +249,22 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
         </div>
       )}
       <div className="messages">
+        {sharedVideo ? (
+          <div className="shared-video-card">
+            <div className="shared-video-title">🎬 Совместный просмотр</div>
+            <div className="shared-video-copy">{sharedVideo.channel} · {sharedVideo.title}</div>
+            <div id={`youtube-player-shell-${chat.id}`} className="shared-video-player">
+              <div id={`youtube-player-${chat.id}`} />
+            </div>
+            <div className="shared-video-controls">
+              <button type="button" className="secondary-button" onClick={playVideo} disabled={!playerReady}>▶</button>
+              <button type="button" className="secondary-button" onClick={pauseVideo} disabled={!playerReady}>⏸</button>
+              <button type="button" className="secondary-button" onClick={() => seekVideo(10)} disabled={!playerReady}>+10с</button>
+              <button type="button" className="secondary-button" onClick={() => seekVideo(-10)} disabled={!playerReady}>-10с</button>
+            </div>
+            <div className="shared-video-footer">Запустил {sharedVideo.startedBy}</div>
+          </div>
+        ) : null}
         {filteredMessages.length === 0 ? (
           <div className="empty-search">Нет сообщений в этом чате</div>
         ) : (
@@ -239,14 +329,15 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
         {pendingImage ? <img src={pendingImage} alt="preview" className="image-preview" /> : null}
         {pendingSticker ? <img src={pendingSticker} alt="sticker preview" className="image-preview" /> : null}
         {voicePreview ? <div className="voice-preview">Голосовое сообщение готово</div> : null}
-        <textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Напишите сообщение..." />
+        <textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={'Напишите сообщение... или !смотреть "канал" "видео"'} />
         <div className="composer-actions">
           <button type="button" className="secondary-button" onClick={() => setShowGifPicker((prev) => !prev)}>
             GIF
           </button>
           <button type="button" className="secondary-button" onClick={handleVoiceNote}>{voicePreview ? 'Сброс' : 'Голосовое'}</button>
-          <label className="upload-button">
-            Фото
+          <label className="composer-icon-button">
+            <span>📷</span>
+            <span>Фото</span>
             <input type="file" accept="image/*" onChange={handleImagePick} />
           </label>
           <button type="button" className="primary-button" onClick={handleSend}>Отправить</button>
