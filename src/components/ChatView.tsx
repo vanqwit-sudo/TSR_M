@@ -1,4 +1,6 @@
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+
+const deleteSound = typeof window !== 'undefined' ? new Audio('/sounds/shot.mp3') : null;
 import type { Chat, User } from '../utils/data';
 import { calculateChatMood } from '../utils/data';
 import Avatar from './Avatar';
@@ -70,6 +72,10 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
   const triggerDeleteAnimation = (messageId: string, scope: 'forMe' | 'forEveryone') => {
     setSelectedMessageId(null);
     setDeletingMessageId(messageId);
+    if (deleteSound) {
+      deleteSound.currentTime = 0;
+      void deleteSound.play().catch(() => undefined);
+    }
     window.setTimeout(() => {
       onDeleteMessage(messageId, scope);
       setDeletingMessageId(null);
