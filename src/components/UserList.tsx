@@ -3,9 +3,10 @@ import Avatar from './Avatar';
 
 interface Props {
   users: User[];
+  onSelectUser?: (user: User) => void;
 }
 
-export default function UserList({ users }: Props) {
+export default function UserList({ users, onSelectUser }: Props) {
   return (
     <div className="user-list">
       <div className="chat-list-header">Пользователи</div>
@@ -13,7 +14,19 @@ export default function UserList({ users }: Props) {
         <div className="empty-search">Никого не найдено</div>
       ) : (
         users.map((user) => (
-          <div key={user.id} className="user-item">
+          <div
+            key={user.id}
+            className="user-item"
+            role="button"
+            tabIndex={0}
+            onClick={() => onSelectUser?.(user)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onSelectUser?.(user);
+              }
+            }}
+          >
             <div className="user-avatar avatar-wrapper">
               <Avatar src={user.avatarUrl} alt={user.displayName} name={user.displayName} className="avatar-small" size={56} />
               <span className="status-dot">{user.statusEmoji}</span>

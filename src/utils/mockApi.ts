@@ -114,10 +114,17 @@ export async function createChat(title: string, participantUsernames: string[], 
   });
 }
 
-export async function sendMessage(chatId: string, senderId: string, text: string): Promise<Chat | null> {
+export async function sendMessage(chatId: string, senderId: string, text: string, imageUrl?: string): Promise<Chat | null> {
   return fetchJson<Chat>('/api/messages', {
     method: 'POST',
-    body: JSON.stringify({ chatId, senderId, text }),
+    body: JSON.stringify({ chatId, senderId, text, imageUrl }),
+  });
+}
+
+export async function deleteMessage(messageId: string, userId: string, scope: 'forMe' | 'forEveryone'): Promise<Chat | null> {
+  return fetchJson<Chat>(`/api/messages/${encodeURIComponent(messageId)}/delete`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, scope }),
   });
 }
 
@@ -132,6 +139,13 @@ export async function updateChat(chatId: string, changes: Partial<Chat>): Promis
   return fetchJson<Chat>(`/api/chats/${encodeURIComponent(chatId)}`, {
     method: 'PATCH',
     body: JSON.stringify(changes),
+  });
+}
+
+export async function addParticipants(chatId: string, userId: string, participantIds: string[]): Promise<Chat | null> {
+  return fetchJson<Chat>(`/api/chats/${encodeURIComponent(chatId)}/participants`, {
+    method: 'POST',
+    body: JSON.stringify({ userId, participantIds }),
   });
 }
 

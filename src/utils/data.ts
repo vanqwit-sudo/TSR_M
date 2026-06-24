@@ -21,7 +21,9 @@ export interface Message {
   id: string;
   senderId: string;
   text: string;
+  imageUrl?: string;
   createdAt: string;
+  deletedFor?: string[];
 }
 
 export interface Chat {
@@ -32,6 +34,7 @@ export interface Chat {
   isGroup: boolean;
   mood: ProfileTheme;
   avatarUrl?: string;
+  creatorId?: string;
   deleteVotes?: string[];
 }
 

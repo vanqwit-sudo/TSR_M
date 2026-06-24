@@ -262,6 +262,7 @@ app.post('/api/chats', async (req, res) => {
     members,
     isGroup: Boolean(isGroup),
     mood: 'neutral',
+    creatorId,
     deleteVotes: [],
     messages: [],
   };
@@ -272,8 +273,8 @@ app.post('/api/chats', async (req, res) => {
 });
 
 app.post('/api/messages', async (req, res) => {
-  const { chatId, senderId, text } = req.body;
-  if (!chatId || !senderId || !text) return res.status(400).send('chatId, senderId и text обязательны');
+  const { chatId, senderId, text, imageUrl } = req.body;
+  if (!chatId || !senderId || (!text && !imageUrl)) return res.status(400).send('chatId, senderId и text/imageUrl обязательны');
   const state = await loadState();
   const chat = getChatById(state, chatId);
   if (!chat) return res.status(404).send('Чат не найден');
@@ -281,7 +282,8 @@ app.post('/api/messages', async (req, res) => {
   const message = {
     id: `${chatId}-${chat.messages.length + 1}`,
     senderId,
-    text,
+    text: text || '',
+    imageUrl: imageUrl || undefined,
     createdAt: new Date().toISOString(),
   };
 
@@ -290,6 +292,41 @@ app.post('/api/messages', async (req, res) => {
   state.chats = state.chats.map((item) => (item.id === chatId ? chat : item));
   await saveState(state);
   res.json(chat);
+});
+
+app.post('/api/messages/:messageId/delete', async (req, res) => {
+  const { messageId } = req.params;
+  const { userId, scope } = req.body;
+  const state = await loadState();
+  let targetChat = null;
+  let targetMessage = null;
+
+  for (const chat of state.chats) {
+    const message = chat.messages.find((item) => item.id === messageId);
+    if (message) {
+      targetChat = chat;
+      targetMessage = message;
+      break;
+    }
+  }
+
+  if (!targetChat || !targetMessage) return res.status(404).send('Сообщение не найдено');
+  if (targetMessage.senderId !== userId && scope === 'forEveryone') return res.status(403).send('Только отправитель может удалить у всех');
+
+  if (scope === 'forEveryone') {
+    targetChat.messages = targetChat.messages.filter((item) => item.id !== messageId);
+  } else {
+    targetChat.messages = targetChat.messages.map((item) =>
+      item.id === messageId
+        ? { ...item, deletedFor: Array.from(new Set([...(item.deletedFor || []), userId])) }
+        : item,
+    );
+  }
+
+  targetChat.mood = getMood(targetChat.messages);
+  state.chats = state.chats.map((item) => (item.id === targetChat.id ? targetChat : item));
+  await saveState(state);
+  res.json(targetChat);
 });
 
 app.patch('/api/chats/:chatId', async (req, res) => {
@@ -302,6 +339,20 @@ app.patch('/api/chats/:chatId', async (req, res) => {
   state.chats = state.chats.map((item) => (item.id === chatId ? updated : item));
   await saveState(state);
   res.json(updated);
+});
+
+app.post('/api/chats/:chatId/participants', async (req, res) => {
+  const { chatId } = req.params;
+  const { userId, participantIds } = req.body;
+  const state = await loadState();
+  const chat = getChatById(state, chatId);
+  if (!chat) return res.status(404).send('Чат не найден');
+  if (chat.creatorId !== userId) return res.status(403).send('Только админ может добавлять пользователей');
+  const nextMembers = Array.from(new Set([...(chat.members || []), ...(participantIds || [])]));
+  chat.members = nextMembers;
+  state.chats = state.chats.map((item) => (item.id === chatId ? chat : item));
+  await saveState(state);
+  res.json(chat);
 });
 
 app.delete('/api/chats/:chatId', async (req, res) => {
