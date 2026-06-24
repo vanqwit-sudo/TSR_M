@@ -60,6 +60,7 @@ function App() {
   const [searchMode, setSearchMode] = useState<'chats' | 'users'>('chats');
   const [showProfile, setShowProfile] = useState(false);
   const [showCreateChat, setShowCreateChat] = useState(false);
+  const [showGifts, setShowGifts] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [profileViewerUser, setProfileViewerUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -355,10 +356,10 @@ function App() {
               <div className="sidebar-panel-content">
                 <div className="sidebar-topbar">
                   <button type="button" className="brand brand-button" onClick={() => setSidebarOpen((prev) => !prev)}>
-                    TSR_M
+                    ☰
                   </button>
-                  <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="theme-toggle">
-                    {theme === 'light' ? 'Тёмная тема' : 'Светлая тема'}
+                  <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="theme-toggle compact-theme-toggle">
+                    {theme === 'light' ? '🌙' : '☀️'}
                   </button>
                 </div>
                 <div className="sidebar-profile-summary">
@@ -374,34 +375,37 @@ function App() {
                 <div className="sidebar-block">
                   <div className="sidebar-top">
                     <div className="sidebar-title">Управление</div>
-                    <button className="sidebar-action" type="button" onClick={() => setShowProfile((prev) => !prev)}>
-                      {showProfile ? 'Скрыть профиль' : 'Редактировать'}
+                    <button className="sidebar-action" type="button" onClick={() => { setShowProfile((prev) => !prev); setShowCreateChat(false); setShowGifts(false); }}>
+                      {showProfile ? 'Скрыть профиль' : 'Профиль'}
                     </button>
-                    <button className="sidebar-action" type="button" onClick={() => setShowCreateChat((prev) => !prev)}>
+                    <button className="sidebar-action" type="button" onClick={() => { setShowCreateChat((prev) => !prev); setShowProfile(false); setShowGifts(false); }}>
                       {showCreateChat ? 'Скрыть чат' : 'Новый чат'}
+                    </button>
+                    <button className="sidebar-action" type="button" onClick={() => { setShowGifts((prev) => !prev); setShowProfile(false); setShowCreateChat(false); }}>
+                      {showGifts ? 'Скрыть гивоки' : 'Гивоки'}
                     </button>
                   </div>
                   {showProfile && <ProfileEditor profile={currentUser} onUpdate={handleProfileUpdate} />}
                   {showCreateChat && <CreateChat onCreate={handleCreateChat} />}
-                </div>
-                <div className="sidebar-block">
-                  <div className="sidebar-title">Поиск</div>
-                  <div className="search-section">
-                    <input
-                      type="text"
-                      placeholder="Поиск по чатам и @username"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                    />
-                    <div className="search-mode">
-                      <button type="button" className={searchMode === 'chats' ? 'active' : ''} onClick={() => setSearchMode('chats')}>
-                        Чаты
-                      </button>
-                      <button type="button" className={searchMode === 'users' ? 'active' : ''} onClick={() => setSearchMode('users')}>
-                        Пользователи
-                      </button>
+                  {showGifts && (
+                    <div className="gift-panel">
+                      <div className="gift-panel-title">Открытая база гивок</div>
+                      <div className="gift-grid">
+                        {[
+                          { emoji: '🎁', title: 'Подарок', text: 'Лёгкий и тёплый' },
+                          { emoji: '💎', title: 'Бриллиант', text: 'Для особых моментов' },
+                          { emoji: '🎉', title: 'Праздник', text: 'Для радости и эмоций' },
+                          { emoji: '💝', title: 'Сердце', text: 'Тёплое сообщение' },
+                        ].map((gift) => (
+                          <div key={gift.title} className="gift-card">
+                            <div className="gift-emoji">{gift.emoji}</div>
+                            <div className="gift-title">{gift.title}</div>
+                            <div className="gift-text">{gift.text}</div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
                 <button className="logout-button" onClick={handleLogout}>
                   Выйти
@@ -413,10 +417,18 @@ function App() {
                 <div className="chat-selector-search">
                   <input
                     type="text"
-                    placeholder="Поиск по чатам"
+                    placeholder="Поиск по чатам и людям"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
+                </div>
+                <div className="search-mode compact-search-mode">
+                  <button type="button" className={searchMode === 'chats' ? 'active' : ''} onClick={() => setSearchMode('chats')}>
+                    Чаты
+                  </button>
+                  <button type="button" className={searchMode === 'users' ? 'active' : ''} onClick={() => setSearchMode('users')}>
+                    Люди
+                  </button>
                 </div>
                 <div className="chat-selector-list">
                   {searchMode === 'users' ? (
