@@ -92,9 +92,7 @@ button:focus {
 
 @media (max-width: 760px) {
   .app { position: relative; }
-  .sidebar-toggle-pill { top: 14px; left: 14px; }
-  .sidebar-toggle-pill.open { transform: translateX(min(92vw, 320px) - 22px); }
-  .sidebar {
+  .left-rail {
     position: fixed;
     left: 0;
     top: 0;
@@ -104,10 +102,8 @@ button:focus {
     min-width: min(92vw, 320px);
     box-shadow: 0 30px 80px rgba(15, 23, 42, 0.2);
   }
-  .sidebar.closed {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
+  .sidebar-toggle-pill { top: 14px; left: 14px; }
+  .sidebar-toggle-pill.open { transform: translateX(min(92vw, 320px) - 22px); }
   .chat-panel { height: 100vh; }
 }
 
@@ -136,27 +132,50 @@ button:focus {
   transform: translateX(280px);
 }
 
-.sidebar {
-  padding: 24px;
-  overflow-y: auto;
-  background: var(--sidebar-bg);
-  color: var(--text);
+.left-rail {
   width: 360px;
   min-width: 360px;
-  transition: transform 0.32s cubic-bezier(.2,.8,.2,1), width 0.32s cubic-bezier(.2,.8,.2,1), min-width 0.32s cubic-bezier(.2,.8,.2,1), padding 0.32s cubic-bezier(.2,.8,.2,1), opacity 0.22s ease;
   flex-shrink: 0;
-  opacity: 1;
-  transform: translateX(0);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.sidebar.closed {
-  width: 0;
-  min-width: 0;
-  padding: 0;
-  opacity: 0;
-  overflow: hidden;
-  transform: translateX(-14px);
-  pointer-events: none;
+.sidebar-panel-content,
+.chat-selector-panel {
+  height: 100vh;
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--sidebar-bg);
+  color: var(--text);
+  scrollbar-gutter: stable;
+}
+
+.chat-selector-panel {
+  background: linear-gradient(180deg, rgba(124,58,237,0.04), rgba(255,255,255,0.02));
+}
+
+.chat-selector-header {
+  font-size: 1.15rem;
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+
+.chat-selector-search {
+  margin-bottom: 14px;
+}
+
+.chat-selector-search input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.sidebar {
+  display: none;
 }
 
 .sidebar-topbar {

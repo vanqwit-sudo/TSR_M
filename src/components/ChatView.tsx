@@ -69,6 +69,14 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     reader.readAsDataURL(file);
   };
 
+  const handleGroupAvatarPick = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setGroupAvatarUrl(String(reader.result));
+    reader.readAsDataURL(file);
+  };
+
   const addParticipantsToGroup = () => {
     const ids = participantInput.split(',').map((value) => value.trim()).filter(Boolean);
     if (ids.length) {
@@ -265,8 +273,9 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
               <input value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} />
             </label>
             <label>
-              Аватарка (URL)
-              <input value={groupAvatarUrl} onChange={(e) => setGroupAvatarUrl(e.target.value)} />
+              Аватарка
+              <input value={groupAvatarUrl} onChange={(e) => setGroupAvatarUrl(e.target.value)} placeholder="URL или файл" />
+              <input type="file" accept="image/*" onChange={handleGroupAvatarPick} />
             </label>
             <label>
               Добавить пользователей (через запятую)

@@ -309,66 +309,82 @@ function App() {
           >
             TSR_M
           </button>
-          <aside className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`} style={appStyle.sidebar}>
-            <div className="sidebar-topbar">
-              <div className="brand">TSR_M</div>
-              <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="theme-toggle">
-                {theme === 'light' ? 'Тёмная тема' : 'Светлая тема'}
-              </button>
-            </div>
-            <div className="sidebar-profile-summary">
-              <div className="avatar-wrapper">
-                <Avatar className="sidebar-avatar" src={currentUser.avatarUrl} alt="avatar" name={currentUser.displayName} size={52} />
-                <span className="status-dot status-dot-small">{currentUser.statusEmoji}</span>
-              </div>
-              <div className="sidebar-profile-text">
-                <div className="sidebar-profile-name">{currentUser.displayName}</div>
-                <div className="sidebar-profile-username">{currentUser.username}</div>
-              </div>
-            </div>
-            <div className="sidebar-block">
-              <div className="sidebar-top">
-                <div className="sidebar-title">Управление</div>
-                <button className="sidebar-action" type="button" onClick={() => setShowProfile((prev) => !prev)}>
-                  {showProfile ? 'Скрыть профиль' : 'Редактировать'}
-                </button>
-                <button className="sidebar-action" type="button" onClick={() => setShowCreateChat((prev) => !prev)}>
-                  {showCreateChat ? 'Скрыть чат' : 'Новый чат'}
-                </button>
-              </div>
-              {showProfile && <ProfileEditor profile={currentUser} onUpdate={handleProfileUpdate} />}
-              {showCreateChat && <CreateChat onCreate={handleCreateChat} />}
-            </div>
-            <div className="sidebar-block">
-              <div className="sidebar-title">Поиск</div>
-              <div className="search-section">
-                <input
-                  type="text"
-                  placeholder="Поиск по чатам и @username"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                <div className="search-mode">
-                  <button type="button" className={searchMode === 'chats' ? 'active' : ''} onClick={() => setSearchMode('chats')}>
-                    Чаты
-                  </button>
-                  <button type="button" className={searchMode === 'users' ? 'active' : ''} onClick={() => setSearchMode('users')}>
-                    Пользователи
+          <div className="left-rail" style={appStyle.sidebar}>
+            {sidebarOpen ? (
+              <div className="sidebar-panel-content">
+                <div className="sidebar-topbar">
+                  <div className="brand">TSR_M</div>
+                  <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="theme-toggle">
+                    {theme === 'light' ? 'Тёмная тема' : 'Светлая тема'}
                   </button>
                 </div>
+                <div className="sidebar-profile-summary">
+                  <div className="avatar-wrapper">
+                    <Avatar className="sidebar-avatar" src={currentUser.avatarUrl} alt="avatar" name={currentUser.displayName} size={52} />
+                    <span className="status-dot status-dot-small">{currentUser.statusEmoji}</span>
+                  </div>
+                  <div className="sidebar-profile-text">
+                    <div className="sidebar-profile-name">{currentUser.displayName}</div>
+                    <div className="sidebar-profile-username">{currentUser.username}</div>
+                  </div>
+                </div>
+                <div className="sidebar-block">
+                  <div className="sidebar-top">
+                    <div className="sidebar-title">Управление</div>
+                    <button className="sidebar-action" type="button" onClick={() => setShowProfile((prev) => !prev)}>
+                      {showProfile ? 'Скрыть профиль' : 'Редактировать'}
+                    </button>
+                    <button className="sidebar-action" type="button" onClick={() => setShowCreateChat((prev) => !prev)}>
+                      {showCreateChat ? 'Скрыть чат' : 'Новый чат'}
+                    </button>
+                  </div>
+                  {showProfile && <ProfileEditor profile={currentUser} onUpdate={handleProfileUpdate} />}
+                  {showCreateChat && <CreateChat onCreate={handleCreateChat} />}
+                </div>
+                <div className="sidebar-block">
+                  <div className="sidebar-title">Поиск</div>
+                  <div className="search-section">
+                    <input
+                      type="text"
+                      placeholder="Поиск по чатам и @username"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                    <div className="search-mode">
+                      <button type="button" className={searchMode === 'chats' ? 'active' : ''} onClick={() => setSearchMode('chats')}>
+                        Чаты
+                      </button>
+                      <button type="button" className={searchMode === 'users' ? 'active' : ''} onClick={() => setSearchMode('users')}>
+                        Пользователи
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <button className="logout-button" onClick={handleLogout}>
+                  Выйти
+                </button>
               </div>
-            </div>
-            <div className="sidebar-block chat-list-block">
-              {searchMode === 'users' ? (
-                <UserList users={userResults} onSelectUser={setProfileViewerUser} />
-              ) : (
-                <ChatList chats={chatResults} users={users} activeId={activeChatId} onSelect={setActiveChatId} />
-              )}
-            </div>
-            <button className="logout-button" onClick={handleLogout}>
-              Выйти
-            </button>
-          </aside>
+            ) : (
+              <div className="chat-selector-panel">
+                <div className="chat-selector-header">Чаты</div>
+                <div className="chat-selector-search">
+                  <input
+                    type="text"
+                    placeholder="Поиск по чатам"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
+                <div className="chat-selector-list">
+                  {searchMode === 'users' ? (
+                    <UserList users={userResults} onSelectUser={setProfileViewerUser} />
+                  ) : (
+                    <ChatList chats={chatResults} users={users} activeId={activeChatId} onSelect={setActiveChatId} />
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <main className="chat-panel" style={appStyle.chatPanel}>
             {activeChat ? (
               <ChatView
