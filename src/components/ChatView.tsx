@@ -38,14 +38,13 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
   const [activeReactionMessageId, setActiveReactionMessageId] = useState<string | null>(null);
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [sharedVideo, setSharedVideo] = useState<SharedVideoState | null>(chat.sharedVideo ?? null);
-  const [playerReady, setPlayerReady] = useState(false);
+  const [playerAutoplay, setPlayerAutoplay] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const playerRef = useRef<any>(null);
 
   useEffect(() => {
     setSharedVideo(chat.sharedVideo ?? null);
-    setPlayerReady(false);
+    setPlayerAutoplay(false);
   }, [chat.sharedVideo]);
 
   useEffect(() => {
@@ -70,53 +69,17 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     return () => window.clearInterval(interval);
   }, [chat.id, sharedVideo?.videoId]);
 
-  useEffect(() => {
-    if (!sharedVideo?.videoId) return;
-
-    const loadPlayer = () => {
-      const iframeId = `youtube-player-${chat.id}`;
-      const existing = document.getElementById(iframeId);
-      if (existing) existing.remove();
-      const container = document.getElementById(`youtube-player-shell-${chat.id}`);
-      if (!container) return;
-      const yt = (window as Window & { YT?: any }).YT;
-      if (!yt?.Player) return;
-      playerRef.current = new yt.Player(iframeId, {
-        videoId: sharedVideo.videoId,
-        host: 'https://www.youtube-nocookie.com',
-        playerVars: { autoplay: 1, rel: 0 },
-        events: {
-          onReady: () => setPlayerReady(true),
-        },
-      });
-    };
-
-    if ((window as Window & { YT?: any }).YT?.Player) {
-      loadPlayer();
-      return;
-    }
-
-    const existingScript = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
-    if (!existingScript) {
-      const script = document.createElement('script');
-      script.src = 'https://www.youtube.com/iframe_api';
-      script.async = true;
-      document.body.appendChild(script);
-    }
-
-    const ready = (window as Window & { onYouTubeIframeAPIReady?: () => void }).onYouTubeIframeAPIReady;
-    (window as Window & { onYouTubeIframeAPIReady?: () => void }).onYouTubeIframeAPIReady = () => {
-      loadPlayer();
-    };
-
-    if ((window as Window & { YT?: any }).YT?.Player) {
-      loadPlayer();
-    }
-
-    return () => {
-      (window as Window & { onYouTubeIframeAPIReady?: () => void }).onYouTubeIframeAPIReady = ready;
-    };
-  }, [chat.id, sharedVideo?.videoId]);
+  const embedVideoUrl = useMemo(() => {
+    if (!sharedVideo?.videoId) return '';
+    const params = new URLSearchParams({
+      rel: '0',
+      modestbranding: '1',
+      playsinline: '1',
+      autoplay: playerAutoplay ? '1' : '0',
+      controls: '1',
+    });
+    return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(sharedVideo.videoId)}?${params.toString()}`;
+  }, [playerAutoplay, sharedVideo?.videoId]);
 
   const pushVideoState = async (status: 'playing' | 'paused', currentTime?: number) => {
     if (!sharedVideo?.videoId) return;
@@ -141,34 +104,25 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
   };
 
   const playVideo = async () => {
-    if (playerRef.current?.playVideo) playerRef.current.playVideo();
-    await pushVideoState('playing', playerRef.current?.getCurrentTime?.() ?? 0);
+    setPlayerAutoplay(true);
+    await pushVideoState('playing', 0);
   };
 
   const pauseVideo = async () => {
-    if (playerRef.current?.pauseVideo) playerRef.current.pauseVideo();
-    await pushVideoState('paused', playerRef.current?.getCurrentTime?.() ?? 0);
+    setPlayerAutoplay(false);
+    await pushVideoState('paused', 0);
   };
 
   const seekVideo = async (seconds: number) => {
-    if (playerRef.current?.seekTo) {
-      const nextTime = (playerRef.current.getCurrentTime?.() ?? 0) + seconds;
-      playerRef.current.seekTo(nextTime, true);
-      await pushVideoState(sharedVideo?.status === 'playing' ? 'playing' : 'paused', nextTime);
+    if (!sharedVideo?.videoId) return;
+    const targetUrl = new URL('https://www.youtube.com/watch');
+    targetUrl.searchParams.set('v', sharedVideo.videoId);
+    if (seconds > 0) {
+      targetUrl.searchParams.set('t', `${seconds}s`);
     }
+    window.open(targetUrl.toString(), '_blank', 'noopener,noreferrer');
+    await pushVideoState(sharedVideo?.status === 'playing' ? 'playing' : 'paused', Math.max(0, seconds));
   };
-
-  useEffect(() => {
-    if (!playerRef.current || !sharedVideo?.videoId) return;
-    if (sharedVideo.status === 'playing') {
-      void playerRef.current.playVideo?.();
-    } else if (sharedVideo.status === 'paused') {
-      void playerRef.current.pauseVideo?.();
-    }
-    if (typeof sharedVideo.currentTime === 'number' && playerRef.current.seekTo) {
-      playerRef.current.seekTo(sharedVideo.currentTime, true);
-    }
-  }, [sharedVideo?.status, sharedVideo?.currentTime, sharedVideo?.videoId]);
 
   const mood = useMemo(() => calculateChatMood(chat.messages), [chat.messages]);
   const otherMembers = members.filter((member) => member.id !== currentUser.id);
@@ -188,6 +142,16 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     setShowGifPicker(false);
   };
 
+  useEffect(() => {
+    setDraft('');
+    setPendingImage(null);
+    setPendingSticker(null);
+    setVoicePreview(null);
+    setShowGifPicker(false);
+    setSearchQuery('');
+    setActiveView('chat');
+  }, [chat.id]);
+
   const currentVoteCount = chat.deleteVotes?.length ?? 0;
   const requiredVotes = chat.isGroup ? Math.floor(chat.members.length / 2) + 1 : chat.members.length;
   const userHasVoted = chat.deleteVotes?.includes(currentUser.id) ?? false;
@@ -201,7 +165,10 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => setPendingImage(String(reader.result));
+    reader.onload = () => {
+      setPendingImage(String(reader.result));
+      setShowGifPicker(false);
+    };
     reader.readAsDataURL(file);
     event.target.value = '';
   };
@@ -259,7 +226,9 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
   };
 
   const saveGroupSettings = () => {
-    onUpdateChat(chat.id, { title: groupTitle.trim() || chat.title, avatarUrl: groupAvatarUrl.trim() || undefined });
+    const nextTitle = groupTitle.trim() || chat.title;
+    const nextAvatar = groupAvatarUrl.trim() || undefined;
+    onUpdateChat(chat.id, { title: nextTitle, avatarUrl: nextAvatar });
     setShowGroupSettings(false);
   };
 
@@ -312,16 +281,31 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
       <div className="messages">
         {sharedVideo ? (
           <div className="shared-video-card">
-            <div className="shared-video-title">🎬 Совместный просмотр</div>
-            <div className="shared-video-copy">{sharedVideo.channel} · {sharedVideo.title}</div>
+            <div className="shared-video-title-row">
+              <div>
+                <div className="shared-video-title">🎬 Совместный просмотр</div>
+                <div className="shared-video-copy">{sharedVideo.channel} · {sharedVideo.title}</div>
+              </div>
+              <button type="button" className="secondary-button shared-video-close" onClick={() => setSharedVideo(null)}>
+                Закрыть
+              </button>
+            </div>
             <div id={`youtube-player-shell-${chat.id}`} className="shared-video-player">
-              <div id={`youtube-player-${chat.id}`} />
+              {embedVideoUrl ? (
+                <iframe
+                  key={embedVideoUrl}
+                  src={embedVideoUrl}
+                  title={sharedVideo.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              ) : null}
             </div>
             <div className="shared-video-controls">
-              <button type="button" className="secondary-button" onClick={playVideo} disabled={!playerReady}>▶</button>
-              <button type="button" className="secondary-button" onClick={pauseVideo} disabled={!playerReady}>⏸</button>
-              <button type="button" className="secondary-button" onClick={() => seekVideo(10)} disabled={!playerReady}>+10с</button>
-              <button type="button" className="secondary-button" onClick={() => seekVideo(-10)} disabled={!playerReady}>-10с</button>
+              <button type="button" className="secondary-button" onClick={playVideo}>▶</button>
+              <button type="button" className="secondary-button" onClick={pauseVideo}>⏸</button>
+              <button type="button" className="secondary-button" onClick={() => void seekVideo(10)}>+10с</button>
+              <button type="button" className="secondary-button" onClick={() => void seekVideo(-10)}>-10с</button>
             </div>
             <div className="shared-video-footer">Запустил {sharedVideo.startedBy}</div>
           </div>

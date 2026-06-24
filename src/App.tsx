@@ -60,7 +60,10 @@ function App() {
   const [searchMode, setSearchMode] = useState<'chats' | 'users'>('chats');
   const [showProfile, setShowProfile] = useState(false);
   const [showCreateChat, setShowCreateChat] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.innerWidth > 760;
+  });
   const [profileViewerUser, setProfileViewerUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -251,6 +254,9 @@ function App() {
     const updated = await updateChat(chatId, changes);
     if (!updated) return;
     setChats((prev) => prev.map((chat) => (chat.id === chatId ? updated : chat)));
+    if (activeChatId === chatId) {
+      setActiveChatId((prev) => (prev === chatId ? chatId : prev));
+    }
   };
 
   const handleDeleteChat = async (chatId: string) => {
@@ -445,7 +451,7 @@ function App() {
               <>
                 <div className="mobile-chat-header">
                   <button type="button" className="mobile-chat-back" onClick={() => setSidebarOpen(true)}>
-                    ☰
+                    ☰ Чаты
                   </button>
                   <div className="mobile-chat-header-copy">
                     <div className="mobile-chat-title">{activeChat.title}</div>
@@ -477,6 +483,9 @@ function App() {
                 <div className="empty-state-copy">Создайте чат или откройте существующий, чтобы продолжить переписку.</div>
                 <button type="button" className="primary-button" onClick={() => setShowCreateChat(true)}>
                   Создать чат
+                </button>
+                <button type="button" className="secondary-button" onClick={() => setSidebarOpen(true)} style={{ marginTop: 10 }}>
+                  Открыть меню
                 </button>
               </div>
             )}
