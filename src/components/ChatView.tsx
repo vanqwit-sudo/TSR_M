@@ -39,12 +39,14 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [sharedVideo, setSharedVideo] = useState<SharedVideoState | null>(chat.sharedVideo ?? null);
   const [playerAutoplay, setPlayerAutoplay] = useState(false);
+  const [playerCurrentTime, setPlayerCurrentTime] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setSharedVideo(chat.sharedVideo ?? null);
     setPlayerAutoplay(false);
+    setPlayerCurrentTime(chat.sharedVideo?.currentTime ?? 0);
   }, [chat.sharedVideo]);
 
   useEffect(() => {
@@ -77,9 +79,10 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
       playsinline: '1',
       autoplay: playerAutoplay ? '1' : '0',
       controls: '1',
+      start: String(Math.max(0, Math.round(playerCurrentTime))),
     });
     return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(sharedVideo.videoId)}?${params.toString()}`;
-  }, [playerAutoplay, sharedVideo?.videoId]);
+  }, [playerAutoplay, playerCurrentTime, sharedVideo?.videoId]);
 
   const pushVideoState = async (status: 'playing' | 'paused', currentTime?: number) => {
     if (!sharedVideo?.videoId) return;
@@ -95,7 +98,7 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
           startedBy: sharedVideo.startedBy,
           thumbnailUrl: sharedVideo.thumbnailUrl || null,
           status,
-          currentTime: currentTime ?? sharedVideo.currentTime ?? 0,
+          currentTime: currentTime ?? playerCurrentTime ?? sharedVideo.currentTime ?? 0,
         }),
       });
     } finally {
@@ -105,23 +108,19 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
 
   const playVideo = async () => {
     setPlayerAutoplay(true);
-    await pushVideoState('playing', 0);
+    await pushVideoState('playing', playerCurrentTime);
   };
 
   const pauseVideo = async () => {
     setPlayerAutoplay(false);
-    await pushVideoState('paused', 0);
+    await pushVideoState('paused', playerCurrentTime);
   };
 
   const seekVideo = async (seconds: number) => {
     if (!sharedVideo?.videoId) return;
-    const targetUrl = new URL('https://www.youtube.com/watch');
-    targetUrl.searchParams.set('v', sharedVideo.videoId);
-    if (seconds > 0) {
-      targetUrl.searchParams.set('t', `${seconds}s`);
-    }
-    window.open(targetUrl.toString(), '_blank', 'noopener,noreferrer');
-    await pushVideoState(sharedVideo?.status === 'playing' ? 'playing' : 'paused', Math.max(0, seconds));
+    const nextTime = Math.max(0, Math.round((playerCurrentTime || sharedVideo.currentTime || 0) + seconds));
+    setPlayerCurrentTime(nextTime);
+    await pushVideoState(sharedVideo?.status === 'playing' ? 'playing' : 'paused', nextTime);
   };
 
   const mood = useMemo(() => calculateChatMood(chat.messages), [chat.messages]);
