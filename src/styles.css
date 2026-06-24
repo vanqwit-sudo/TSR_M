@@ -1319,6 +1319,32 @@ button:focus {
   margin-bottom: 10px;
 }
 
+.shared-video-preview {
+  position: relative;
+  margin-bottom: 10px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #111827;
+}
+
+.shared-video-preview img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  display: block;
+}
+
+.shared-video-preview-badge {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.8);
+  color: white;
+  font-size: 0.8rem;
+}
+
 .shared-video-player {
   border-radius: 16px;
   overflow: hidden;

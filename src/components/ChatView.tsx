@@ -39,6 +39,7 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
   const [showGifPicker, setShowGifPicker] = useState(false);
   const [sharedVideo, setSharedVideo] = useState<SharedVideoState | null>(chat.sharedVideo ?? null);
   const [playerReady, setPlayerReady] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<any>(null);
 
@@ -46,6 +47,28 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     setSharedVideo(chat.sharedVideo ?? null);
     setPlayerReady(false);
   }, [chat.sharedVideo]);
+
+  useEffect(() => {
+    if (!chat.id) return;
+    const syncVideoState = async () => {
+      try {
+        const response = await fetch(`/api/chats/${encodeURIComponent(chat.id)}/video`);
+        if (!response.ok) return;
+        const nextVideo = (await response.json()) as SharedVideoState | null;
+        if (nextVideo?.videoId && nextVideo.videoId !== sharedVideo?.videoId) {
+          setSharedVideo(nextVideo);
+        } else if (nextVideo && sharedVideo) {
+          setSharedVideo((prev) => prev ? { ...prev, ...nextVideo } : nextVideo);
+        }
+      } catch {
+        // ignore sync failures
+      }
+    };
+
+    const interval = window.setInterval(syncVideoState, 1800);
+    void syncVideoState();
+    return () => window.clearInterval(interval);
+  }, [chat.id, sharedVideo?.videoId]);
 
   useEffect(() => {
     if (!sharedVideo?.videoId) return;
@@ -95,19 +118,57 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     };
   }, [chat.id, sharedVideo?.videoId]);
 
-  const playVideo = () => {
-    if (playerRef.current?.playVideo) playerRef.current.playVideo();
-  };
-
-  const pauseVideo = () => {
-    if (playerRef.current?.pauseVideo) playerRef.current.pauseVideo();
-  };
-
-  const seekVideo = (seconds: number) => {
-    if (playerRef.current?.seekTo) {
-      playerRef.current.seekTo(playerRef.current.getCurrentTime() + seconds, true);
+  const pushVideoState = async (status: 'playing' | 'paused', currentTime?: number) => {
+    if (!sharedVideo?.videoId) return;
+    setIsSyncing(true);
+    try {
+      await fetch(`/api/chats/${encodeURIComponent(chat.id)}/video`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoId: sharedVideo.videoId,
+          title: sharedVideo.title,
+          channel: sharedVideo.channel,
+          startedBy: sharedVideo.startedBy,
+          thumbnailUrl: sharedVideo.thumbnailUrl || null,
+          status,
+          currentTime: currentTime ?? sharedVideo.currentTime ?? 0,
+        }),
+      });
+    } finally {
+      setIsSyncing(false);
     }
   };
+
+  const playVideo = async () => {
+    if (playerRef.current?.playVideo) playerRef.current.playVideo();
+    await pushVideoState('playing', playerRef.current?.getCurrentTime?.() ?? 0);
+  };
+
+  const pauseVideo = async () => {
+    if (playerRef.current?.pauseVideo) playerRef.current.pauseVideo();
+    await pushVideoState('paused', playerRef.current?.getCurrentTime?.() ?? 0);
+  };
+
+  const seekVideo = async (seconds: number) => {
+    if (playerRef.current?.seekTo) {
+      const nextTime = (playerRef.current.getCurrentTime?.() ?? 0) + seconds;
+      playerRef.current.seekTo(nextTime, true);
+      await pushVideoState(sharedVideo?.status === 'playing' ? 'playing' : 'paused', nextTime);
+    }
+  };
+
+  useEffect(() => {
+    if (!playerRef.current || !sharedVideo?.videoId) return;
+    if (sharedVideo.status === 'playing') {
+      void playerRef.current.playVideo?.();
+    } else if (sharedVideo.status === 'paused') {
+      void playerRef.current.pauseVideo?.();
+    }
+    if (typeof sharedVideo.currentTime === 'number' && playerRef.current.seekTo) {
+      playerRef.current.seekTo(sharedVideo.currentTime, true);
+    }
+  }, [sharedVideo?.status, sharedVideo?.currentTime, sharedVideo?.videoId]);
 
   const mood = useMemo(() => calculateChatMood(chat.messages), [chat.messages]);
   const otherMembers = members.filter((member) => member.id !== currentUser.id);

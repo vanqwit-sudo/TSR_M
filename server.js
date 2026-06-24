@@ -103,6 +103,24 @@ function parseWatchCommand(text) {
 }
 
 async function searchYouTubeVideo(query) {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (apiKey) {
+    const endpoint = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=${encodeURIComponent(query)}&key=${encodeURIComponent(apiKey)}`;
+    const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
+    if (response.ok) {
+      const data = await response.json();
+      const firstVideo = data.items?.[0];
+      if (firstVideo) {
+        return {
+          videoId: firstVideo.id?.videoId || null,
+          title: firstVideo.snippet?.title || 'YouTube video',
+          channel: firstVideo.snippet?.channelTitle || 'YouTube',
+          thumbnailUrl: firstVideo.snippet?.thumbnails?.high?.url || firstVideo.snippet?.thumbnails?.medium?.url || null,
+        };
+      }
+    }
+  }
+
   const proxyUrl = process.env.YOUTUBE_PROXY_URL || 'https://vid.puffyan.us/api/v1/search';
   const endpoint = `${proxyUrl}?q=${encodeURIComponent(query)}&type=video&sort_by=relevance&region=US`;
   const response = await fetch(endpoint, {
@@ -121,6 +139,7 @@ async function searchYouTubeVideo(query) {
     videoId: firstVideo.videoId || firstVideo.video_id || firstVideo.id || null,
     title: firstVideo.title || 'YouTube video',
     channel: firstVideo.author || firstVideo.channel || 'YouTube',
+    thumbnailUrl: firstVideo.thumbnail || firstVideo.thumbnailUrl || firstVideo.bestThumbnail?.url || null,
   };
 }
 
@@ -271,12 +290,18 @@ app.post('/api/messages', async (req, res) => {
           title: video.title,
           channel: video.channel,
           startedBy: sender?.displayName || 'участник',
+          thumbnailUrl: video.thumbnailUrl || null,
+          status: 'playing',
+          currentTime: 0,
         }
       : {
           videoId: `${watchCommand.channel}-${watchCommand.title}`.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
           title: watchCommand.title,
           channel: watchCommand.channel,
           startedBy: sender?.displayName || 'участник',
+          thumbnailUrl: null,
+          status: 'playing',
+          currentTime: 0,
         };
   }
 
@@ -327,6 +352,36 @@ app.post('/api/messages/:messageId/reactions', async (req, res) => {
   state.chats = state.chats.map((item) => (item.id === targetChat.id ? targetChat : item));
   await saveState(state);
   res.json(targetChat);
+});
+
+app.get('/api/chats/:chatId/video', async (req, res) => {
+  const { chatId } = req.params;
+  const state = await loadState();
+  const chat = getChatById(state, chatId);
+  if (!chat) return res.status(404).send('Чат не найден');
+  res.json(chat.sharedVideo || null);
+});
+
+app.post('/api/chats/:chatId/video', async (req, res) => {
+  const { chatId } = req.params;
+  const { videoId, title, channel, startedBy, thumbnailUrl, status, currentTime } = req.body;
+  const state = await loadState();
+  const chat = getChatById(state, chatId);
+  if (!chat) return res.status(404).send('Чат не найден');
+
+  chat.sharedVideo = {
+    videoId: videoId || chat.sharedVideo?.videoId || '',
+    title: title || chat.sharedVideo?.title || 'YouTube video',
+    channel: channel || chat.sharedVideo?.channel || 'YouTube',
+    startedBy: startedBy || chat.sharedVideo?.startedBy || 'участник',
+    thumbnailUrl: thumbnailUrl || chat.sharedVideo?.thumbnailUrl || null,
+    status: status || chat.sharedVideo?.status || 'paused',
+    currentTime: Number.isFinite(Number(currentTime)) ? Number(currentTime) : chat.sharedVideo?.currentTime || 0,
+  };
+
+  state.chats = state.chats.map((item) => (item.id === chatId ? chat : item));
+  await saveState(state);
+  res.json(chat.sharedVideo);
 });
 
 app.post('/api/chats/:chatId/pin', async (req, res) => {
