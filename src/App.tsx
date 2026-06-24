@@ -43,15 +43,7 @@ function loadPersistedProfile(user: User | null) {
 }
 
 function App() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window === 'undefined') return 'light';
-    try {
-      const saved = window.localStorage.getItem('tsr_m_theme');
-      return saved === 'dark' ? 'dark' : 'light';
-    } catch {
-      return 'light';
-    }
-  });
+  const theme = 'light' as const;
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -81,14 +73,11 @@ function App() {
   }, []);
 
   useEffect(() => {
-    document.body.dataset.theme = theme;
+    document.body.dataset.theme = 'light';
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem('tsr_m_theme', theme);
+      window.localStorage.removeItem('tsr_m_theme');
     }
-    return () => {
-      document.body.dataset.theme = 'light';
-    };
-  }, [theme]);
+  }, []);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -331,6 +320,7 @@ function App() {
   const userResults = searchMode === 'users' ? (searchResults as User[]) : users;
 
   const appStyle = themeStyles[theme];
+  const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
 
   if (loading) {
     return <div className="loading-screen">Загрузка TSR_M...</div>;
@@ -350,7 +340,7 @@ function App() {
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme: () => undefined }}>
       <DeviceContext.Provider value={device}>
         <div className={`app ${theme} ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={appStyle.app}>
           <button
@@ -371,9 +361,6 @@ function App() {
                     </button>
                     <div className="brand-caption">Telegram-like messenger</div>
                   </div>
-                  <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="theme-toggle compact-theme-toggle">
-                    {theme === 'light' ? '🌙' : '☀️'}
-                  </button>
                 </div>
                 <div className="sidebar-search">
                   <input
@@ -391,29 +378,75 @@ function App() {
                     Люди
                   </button>
                 </div>
-                <div className="sidebar-profile-summary">
-                  <div className="avatar-wrapper">
-                    <Avatar className="sidebar-avatar" src={currentUser.avatarUrl} alt="avatar" name={currentUser.displayName} size={52} />
-                    <span className="status-dot status-dot-small">{currentUser.statusEmoji}</span>
-                  </div>
-                  <div className="sidebar-profile-text">
-                    <div className="sidebar-profile-name">{currentUser.displayName}</div>
-                    <div className="sidebar-profile-username">{currentUser.username}</div>
-                  </div>
-                </div>
-                <div className="sidebar-block">
-                  <div className="sidebar-top">
-                    <div className="sidebar-title">Управление</div>
-                    <button className="sidebar-action" type="button" onClick={() => { setShowProfile((prev) => !prev); setShowCreateChat(false); }}>
-                      {showProfile ? 'Скрыть профиль' : 'Профиль'}
-                    </button>
-                    <button className="sidebar-action" type="button" onClick={() => { setShowCreateChat((prev) => !prev); setShowProfile(false); }}>
-                      {showCreateChat ? 'Скрыть чат' : 'Новый чат'}
-                    </button>
-                  </div>
-                  {showProfile && <ProfileEditor profile={currentUser} onUpdate={handleProfileUpdate} />}
-                  {showCreateChat && <CreateChat onCreate={handleCreateChat} />}
-                </div>
+                {!isMobileViewport ? (
+                  <>
+                    <div className="sidebar-profile-summary">
+                      <div className="avatar-wrapper">
+                        <Avatar className="sidebar-avatar" src={currentUser.avatarUrl} alt="avatar" name={currentUser.displayName} size={52} />
+                        <span className="status-dot status-dot-small">{currentUser.statusEmoji}</span>
+                      </div>
+                      <div className="sidebar-profile-text">
+                        <div className="sidebar-profile-name">{currentUser.displayName}</div>
+                        <div className="sidebar-profile-username">{currentUser.username}</div>
+                      </div>
+                    </div>
+                    <div className="sidebar-block">
+                      <div className="sidebar-top">
+                        <div className="sidebar-title">Управление</div>
+                        <button className="sidebar-action" type="button" onClick={() => { setShowProfile((prev) => !prev); setShowCreateChat(false); }}>
+                          {showProfile ? 'Скрыть профиль' : 'Профиль'}
+                        </button>
+                        <button className="sidebar-action" type="button" onClick={() => { setShowCreateChat((prev) => !prev); setShowProfile(false); }}>
+                          {showCreateChat ? 'Скрыть чат' : 'Новый чат'}
+                        </button>
+                      </div>
+                      {showProfile && <ProfileEditor profile={currentUser} onUpdate={handleProfileUpdate} />}
+                      {showCreateChat && <CreateChat onCreate={handleCreateChat} />}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="sidebar-block">
+                      <div className="sidebar-top">
+                        <div className="sidebar-title">Чаты</div>
+                        <button className="sidebar-action" type="button" onClick={() => { setShowCreateChat((prev) => !prev); setShowProfile(false); }}>
+                          {showCreateChat ? 'Скрыть чат' : 'Новый чат'}
+                        </button>
+                      </div>
+                      <div className="chat-selector-list mobile-chat-selector-list">
+                        {searchMode === 'users' ? (
+                          <UserList
+                            users={userResults}
+                            onSelectUser={(user) => {
+                              setProfileViewerUser(user);
+                              setSidebarOpen(false);
+                            }}
+                          />
+                        ) : (
+                          <ChatList
+                            chats={chatResults}
+                            users={users}
+                            activeId={activeChatId}
+                            onSelect={(id) => {
+                              setActiveChatId(id);
+                              setSidebarOpen(false);
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                    <div className="sidebar-block">
+                      <div className="sidebar-top">
+                        <div className="sidebar-title">Управление</div>
+                        <button className="sidebar-action" type="button" onClick={() => { setShowProfile((prev) => !prev); setShowCreateChat(false); }}>
+                          {showProfile ? 'Скрыть профиль' : 'Профиль'}
+                        </button>
+                      </div>
+                      {showProfile && <ProfileEditor profile={currentUser} onUpdate={handleProfileUpdate} />}
+                      {showCreateChat && <CreateChat onCreate={handleCreateChat} />}
+                    </div>
+                  </>
+                )}
                 <button className="logout-button" onClick={handleLogout}>
                   Выйти
                 </button>
@@ -476,7 +509,7 @@ function App() {
                     <div className="mobile-chat-title">{activeChat.title}</div>
                     <div className="mobile-chat-subtitle">{activeChat.isGroup ? `${activeChat.members.length} участников` : 'Переписка'}</div>
                   </div>
-                  <button type="button" className="mobile-chat-action" onClick={() => setShowCreateChat(true)}>
+                  <button type="button" className="mobile-chat-action" onClick={() => { setShowCreateChat(true); setSidebarOpen(true); }}>
                     +
                   </button>
                 </div>
@@ -500,7 +533,7 @@ function App() {
               <div className="empty-state-card">
                 <div className="empty-state-title">Начните общение</div>
                 <div className="empty-state-copy">Создайте чат или откройте существующий, чтобы продолжить переписку.</div>
-                <button type="button" className="primary-button" onClick={() => setShowCreateChat(true)}>
+                <button type="button" className="primary-button" onClick={() => { setShowCreateChat(true); setSidebarOpen(true); }}>
                   Создать чат
                 </button>
                 <button type="button" className="secondary-button" onClick={() => setSidebarOpen(true)} style={{ marginTop: 10 }}>
