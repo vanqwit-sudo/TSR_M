@@ -40,13 +40,19 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
   const [sharedVideo, setSharedVideo] = useState<SharedVideoState | null>(chat.sharedVideo ?? null);
   const [playerAutoplay, setPlayerAutoplay] = useState(false);
   const [playerCurrentTime, setPlayerCurrentTime] = useState(0);
+  const [playerProvider, setPlayerProvider] = useState<'youtube-nocookie' | 'youtube' | 'invidious'>('youtube-nocookie');
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     setSharedVideo(chat.sharedVideo ?? null);
     setPlayerAutoplay(false);
     setPlayerCurrentTime(chat.sharedVideo?.currentTime ?? 0);
+    setPlayerProvider('youtube-nocookie');
   }, [chat.sharedVideo]);
 
   useEffect(() => {
@@ -81,8 +87,17 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
       controls: '1',
       start: String(Math.max(0, Math.round(playerCurrentTime))),
     });
+
+    if (playerProvider === 'invidious') {
+      return `https://yewtu.be/embed/${encodeURIComponent(sharedVideo.videoId)}?${params.toString()}`;
+    }
+
+    if (playerProvider === 'youtube') {
+      return `https://www.youtube.com/embed/${encodeURIComponent(sharedVideo.videoId)}?${params.toString()}`;
+    }
+
     return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(sharedVideo.videoId)}?${params.toString()}`;
-  }, [playerAutoplay, playerCurrentTime, sharedVideo?.videoId]);
+  }, [playerAutoplay, playerCurrentTime, playerProvider, sharedVideo?.videoId]);
 
   const pushVideoState = async (status: 'playing' | 'paused', currentTime?: number) => {
     if (!sharedVideo?.videoId) return;
@@ -123,6 +138,115 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     await pushVideoState(sharedVideo?.status === 'playing' ? 'playing' : 'paused', nextTime);
   };
 
+  const blobToDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read blob'));
+    reader.readAsDataURL(blob);
+  });
+
+  const createFallbackVoiceNote = async () => {
+    const sampleRate = 22050;
+    const durationSeconds = 0.9;
+    const frameCount = Math.floor(sampleRate * durationSeconds);
+    const buffer = new ArrayBuffer(44 + frameCount * 2);
+    const view = new DataView(buffer);
+    const writeString = (offset: number, value: string) => {
+      for (let index = 0; index < value.length; index += 1) {
+        view.setUint8(offset + index, value.charCodeAt(index));
+      }
+    };
+
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + frameCount * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, frameCount * 2, true);
+
+    for (let index = 0; index < frameCount; index += 1) {
+      const t = index / sampleRate;
+      const sample = Math.sin(2 * Math.PI * 420 * t) * 0.25 + Math.sin(2 * Math.PI * 660 * t) * 0.12;
+      view.setInt16(44 + index * 2, sample * 0x7fff, true);
+    }
+
+    const blob = new Blob([buffer], { type: 'audio/wav' });
+    return blobToDataUrl(blob);
+  };
+
+  const stopVoiceRecording = () => {
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  const startVoiceRecording = async () => {
+    if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setVoiceError('Микрофон недоступен в этом браузере');
+      const fallbackVoice = await createFallbackVoiceNote();
+      setVoicePreview(fallbackVoice);
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+      recorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+        const voiceUrl = chunks.length > 0 ? await blobToDataUrl(blob) : await createFallbackVoiceNote();
+        setVoicePreview(voiceUrl);
+        setIsRecording(false);
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+        mediaRecorderRef.current = null;
+      };
+      recorder.onerror = () => {
+        setVoiceError('Не удалось записать голосовое сообщение');
+        setIsRecording(false);
+        stream.getTracks().forEach((track) => track.stop());
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      streamRef.current = stream;
+      setVoiceError(null);
+      setIsRecording(true);
+    } catch {
+      setVoiceError('Доступ к микрофону запрещён');
+      const fallbackVoice = await createFallbackVoiceNote();
+      setVoicePreview(fallbackVoice);
+      setIsRecording(false);
+    }
+  };
+
+  const handleVoiceNote = async () => {
+    if (isRecording) {
+      stopVoiceRecording();
+      return;
+    }
+
+    if (voicePreview) {
+      setVoicePreview(null);
+      setVoiceError(null);
+      return;
+    }
+
+    await startVoiceRecording();
+  };
+
   const mood = useMemo(() => calculateChatMood(chat.messages), [chat.messages]);
   const otherMembers = members.filter((member) => member.id !== currentUser.id);
   const title = chat.title || (otherMembers[0]?.displayName ?? 'Чат');
@@ -138,6 +262,8 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     setPendingImage(null);
     setPendingSticker(null);
     setVoicePreview(null);
+    setVoiceError(null);
+    setIsRecording(false);
     setShowGifPicker(false);
   };
 
@@ -146,10 +272,21 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     setPendingImage(null);
     setPendingSticker(null);
     setVoicePreview(null);
+    setVoiceError(null);
+    setIsRecording(false);
     setShowGifPicker(false);
     setSearchQuery('');
     setActiveView('chat');
   }, [chat.id]);
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
 
   const currentVoteCount = chat.deleteVotes?.length ?? 0;
   const requiredVotes = chat.isGroup ? Math.floor(chat.members.length / 2) + 1 : chat.members.length;
@@ -196,14 +333,6 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     'https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif',
   ];
   const reactionOptions = ['👍', '❤️', '😂', '🔥', '🎉', '🙏'];
-
-  const handleVoiceNote = () => {
-    if (voicePreview) {
-      setVoicePreview(null);
-      return;
-    }
-    setVoicePreview('voice-note');
-  };
 
   const filteredMessages = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -284,6 +413,7 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
               <div>
                 <div className="shared-video-title">🎬 Совместный просмотр</div>
                 <div className="shared-video-copy">{sharedVideo.channel} · {sharedVideo.title}</div>
+                {sharedVideo.sourceUrl ? <div className="shared-video-copy">Источник: {sharedVideo.sourceUrl}</div> : null}
               </div>
               <button type="button" className="secondary-button shared-video-close" onClick={() => setSharedVideo(null)}>
                 Закрыть
@@ -295,6 +425,13 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
                   key={embedVideoUrl}
                   src={embedVideoUrl}
                   title={sharedVideo.title}
+                  onError={() => {
+                    if (playerProvider === 'youtube-nocookie') {
+                      setPlayerProvider('youtube');
+                    } else if (playerProvider === 'youtube') {
+                      setPlayerProvider('invidious');
+                    }
+                  }}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
                 />
@@ -372,13 +509,14 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
       <div className="message-input">
         {pendingImage ? <img src={pendingImage} alt="preview" className="image-preview" /> : null}
         {pendingSticker ? <img src={pendingSticker} alt="sticker preview" className="image-preview" /> : null}
-        {voicePreview ? <div className="voice-preview">Голосовое сообщение готово</div> : null}
-        <textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={'Напишите сообщение... или !смотреть "канал" "видео"'} />
+        {voicePreview ? <div className="voice-preview">{isRecording ? 'Идёт запись…' : 'Голосовое сообщение готово'}</div> : null}
+        {voiceError ? <div className="voice-preview voice-preview-error">{voiceError}</div> : null}
+        <textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={'Напишите сообщение... или !смотреть "канал" "видео" / ссылка'} />
         <div className="composer-actions">
           <button type="button" className="secondary-button" onClick={() => setShowGifPicker((prev) => !prev)}>
             GIF
           </button>
-          <button type="button" className="secondary-button" onClick={handleVoiceNote}>{voicePreview ? 'Сброс' : 'Голосовое'}</button>
+          <button type="button" className="secondary-button" onClick={() => void handleVoiceNote()}>{isRecording ? 'Остановить' : voicePreview ? 'Сброс' : 'Запись'}</button>
           <label className="composer-icon-button">
             <span>📷</span>
             <span>Фото</span>

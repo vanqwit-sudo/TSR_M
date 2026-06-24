@@ -35,6 +35,7 @@ export interface SharedVideoState {
   channel: string;
   startedBy: string;
   thumbnailUrl?: string | null;
+  sourceUrl?: string | null;
   status?: 'playing' | 'paused';
   currentTime?: number;
 }

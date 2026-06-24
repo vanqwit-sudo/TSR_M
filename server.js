@@ -97,9 +97,59 @@ function deleteThreshold(chat) {
 
 function parseWatchCommand(text) {
   const normalized = String(text || '').trim();
-  const match = normalized.match(/^!смотреть\s+"([^"]+)"\s+"([^"]+)"$/i);
-  if (!match) return null;
-  return { channel: match[1].trim(), title: match[2].trim() };
+  if (!normalized.startsWith('!смотреть')) return null;
+
+  const quotedMatch = normalized.match(/^!смотреть\s+"([^"]+)"\s+"([^"]+)"$/i);
+  if (quotedMatch) {
+    return { type: 'search', channel: quotedMatch[1].trim(), title: quotedMatch[2].trim() };
+  }
+
+  const directUrlMatch = normalized.match(/^!смотреть\s+(https?:\/\/\S+)$/i);
+  if (directUrlMatch) {
+    return { type: 'url', sourceUrl: directUrlMatch[1].trim() };
+  }
+
+  const simpleMatch = normalized.match(/^!смотреть\s+(.+)$/i);
+  if (simpleMatch) {
+    return { type: 'search', channel: '', title: simpleMatch[1].trim() };
+  }
+
+  return null;
+}
+
+function extractYouTubeVideoId(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return null;
+  const patterns = [
+    /youtu\.be\/([A-Za-z0-9_-]{11})/i,
+    /youtube\.com\/watch\?[^\s#]*v=([A-Za-z0-9_-]{11})/i,
+    /youtube\.com\/embed\/([A-Za-z0-9_-]{11})/i,
+    /youtube\.com\/shorts\/([A-Za-z0-9_-]{11})/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = trimmed.match(pattern);
+    if (match) return match[1];
+  }
+
+  return trimmed.match(/^([A-Za-z0-9_-]{11})$/) ? trimmed : null;
+}
+
+async function getYouTubeMetadataFromUrl(url) {
+  try {
+    const response = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return {
+      title: data.title || 'YouTube video',
+      channel: data.author_name || 'YouTube',
+      thumbnailUrl: data.thumbnail_url || null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function searchYouTubeVideo(query) {
@@ -282,8 +332,25 @@ app.post('/api/messages', async (req, res) => {
   let sharedVideo = chat.sharedVideo || null;
 
   if (watchCommand) {
-    const video = await searchYouTubeVideo(`${watchCommand.channel} ${watchCommand.title}`);
     const sender = getUserById(state, senderId);
+    let video = null;
+
+    if (watchCommand.type === 'url') {
+      const videoId = extractYouTubeVideoId(watchCommand.sourceUrl);
+      const metadata = await getYouTubeMetadataFromUrl(watchCommand.sourceUrl);
+      video = videoId
+        ? {
+            videoId,
+            title: metadata?.title || 'YouTube video',
+            channel: metadata?.channel || 'YouTube',
+            thumbnailUrl: metadata?.thumbnailUrl || null,
+            sourceUrl: watchCommand.sourceUrl,
+          }
+        : null;
+    } else {
+      video = await searchYouTubeVideo(`${watchCommand.channel} ${watchCommand.title}`);
+    }
+
     sharedVideo = video
       ? {
           videoId: video.videoId,
@@ -291,15 +358,17 @@ app.post('/api/messages', async (req, res) => {
           channel: video.channel,
           startedBy: sender?.displayName || 'участник',
           thumbnailUrl: video.thumbnailUrl || null,
+          sourceUrl: video.sourceUrl || null,
           status: 'playing',
           currentTime: 0,
         }
       : {
           videoId: `${watchCommand.channel}-${watchCommand.title}`.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
           title: watchCommand.title,
-          channel: watchCommand.channel,
+          channel: watchCommand.channel || 'YouTube',
           startedBy: sender?.displayName || 'участник',
           thumbnailUrl: null,
+          sourceUrl: watchCommand.type === 'url' ? watchCommand.sourceUrl : null,
           status: 'playing',
           currentTime: 0,
         };
