@@ -1,18 +1,10 @@
-import { useMemo, useRef, useState, type ChangeEvent, type DragEvent, useEffect } from 'react';
-import type { SharedVideoState, Message } from '../utils/data';
+import { useMemo, useRef, useState, type ChangeEvent, useEffect } from 'react';
+import type { SharedVideoState } from '../utils/data';
 
 const deleteSound = typeof window !== 'undefined' ? new Audio('/sounds/shot.mp3') : null;
 import type { Chat, User } from '../utils/data';
 import { calculateChatMood } from '../utils/data';
 import Avatar from './Avatar';
-
-const DRAFT_STORAGE_PREFIX = 'tsr_m_draft_';
-
-function formatDayLabel(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Сегодня';
-  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
-}
 
 interface Props {
   chat: Chat;
@@ -48,32 +40,14 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
   const [sharedVideo, setSharedVideo] = useState<SharedVideoState | null>(chat.sharedVideo ?? null);
   const [playerAutoplay, setPlayerAutoplay] = useState(false);
   const [playerCurrentTime, setPlayerCurrentTime] = useState(0);
-  const [playerProvider, setPlayerProvider] = useState<'youtube-nocookie' | 'youtube'>('youtube-nocookie');
-  const [playerRefreshToken, setPlayerRefreshToken] = useState(0);
-  const [isRecording, setIsRecording] = useState(false);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [showScrollButton, setShowScrollButton] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
-  const [typingUser, setTypingUser] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
-    if (!chat.sharedVideo?.videoId) {
-      setSharedVideo(null);
-      setPlayerAutoplay(false);
-      setPlayerCurrentTime(0);
-      return;
-    }
-
-    setSharedVideo(chat.sharedVideo);
-    setPlayerAutoplay(chat.sharedVideo.status === 'playing');
-    setPlayerCurrentTime(chat.sharedVideo.currentTime ?? 0);
-    setPlayerProvider('youtube-nocookie');
-  }, [chat.sharedVideo?.videoId, chat.sharedVideo?.status, chat.sharedVideo?.currentTime]);
+    setSharedVideo(chat.sharedVideo ?? null);
+    setPlayerAutoplay(false);
+    setPlayerCurrentTime(chat.sharedVideo?.currentTime ?? 0);
+  }, [chat.sharedVideo]);
 
   useEffect(() => {
     if (!chat.id) return;
@@ -86,16 +60,6 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
           setSharedVideo(nextVideo);
         } else if (nextVideo && sharedVideo) {
           setSharedVideo((prev) => prev ? { ...prev, ...nextVideo } : nextVideo);
-        }
-
-        if (nextVideo?.status) {
-          setPlayerAutoplay(nextVideo.status === 'playing');
-        }
-        if (typeof nextVideo?.currentTime === 'number') {
-          setPlayerCurrentTime(nextVideo.currentTime);
-        }
-        if (nextVideo?.videoId) {
-          setPlayerRefreshToken((value) => value + 1);
         }
       } catch {
         // ignore sync failures
@@ -116,46 +80,27 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
       autoplay: playerAutoplay ? '1' : '0',
       controls: '1',
       start: String(Math.max(0, Math.round(playerCurrentTime))),
-      iv_load_policy: '3',
-      enablejsapi: '1',
     });
-
-    if (playerProvider === 'youtube') {
-      return `https://www.youtube.com/embed/${encodeURIComponent(sharedVideo.videoId)}?${params.toString()}`;
-    }
-
     return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(sharedVideo.videoId)}?${params.toString()}`;
-  }, [playerAutoplay, playerCurrentTime, playerProvider, sharedVideo?.videoId]);
+  }, [playerAutoplay, playerCurrentTime, sharedVideo?.videoId]);
 
   const pushVideoState = async (status: 'playing' | 'paused', currentTime?: number) => {
     if (!sharedVideo?.videoId) return;
-    const nextTime = Math.max(0, Math.round(currentTime ?? playerCurrentTime ?? sharedVideo.currentTime ?? 0));
     setIsSyncing(true);
     try {
-      const response = await fetch(`/api/chats/${encodeURIComponent(chat.id)}/video`, {
+      await fetch(`/api/chats/${encodeURIComponent(chat.id)}/video`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           videoId: sharedVideo.videoId,
           title: sharedVideo.title,
           channel: sharedVideo.channel,
-          startedBy: sharedVideo.startedBy || currentUser.displayName,
+          startedBy: sharedVideo.startedBy,
           thumbnailUrl: sharedVideo.thumbnailUrl || null,
-          sourceUrl: sharedVideo.sourceUrl || null,
           status,
-          currentTime: nextTime,
+          currentTime: currentTime ?? playerCurrentTime ?? sharedVideo.currentTime ?? 0,
         }),
       });
-
-      if (response.ok) {
-        const nextVideo = (await response.json()) as SharedVideoState | null;
-        if (nextVideo) {
-          setSharedVideo(nextVideo);
-          setPlayerAutoplay(nextVideo.status === 'playing');
-          setPlayerCurrentTime(nextVideo.currentTime ?? 0);
-          setPlayerRefreshToken((value) => value + 1);
-        }
-      }
     } finally {
       setIsSyncing(false);
     }
@@ -178,144 +123,6 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     await pushVideoState(sharedVideo?.status === 'playing' ? 'playing' : 'paused', nextTime);
   };
 
-  const blobToDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read blob'));
-    reader.readAsDataURL(blob);
-  });
-
-  const createFallbackVoiceNote = async () => {
-    const sampleRate = 22050;
-    const durationSeconds = 0.9;
-    const frameCount = Math.floor(sampleRate * durationSeconds);
-    const buffer = new ArrayBuffer(44 + frameCount * 2);
-    const view = new DataView(buffer);
-    const writeString = (offset: number, value: string) => {
-      for (let index = 0; index < value.length; index += 1) {
-        view.setUint8(offset + index, value.charCodeAt(index));
-      }
-    };
-
-    writeString(0, 'RIFF');
-    view.setUint32(4, 36 + frameCount * 2, true);
-    writeString(8, 'WAVE');
-    writeString(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeString(36, 'data');
-    view.setUint32(40, frameCount * 2, true);
-
-    for (let index = 0; index < frameCount; index += 1) {
-      const t = index / sampleRate;
-      const sample = Math.sin(2 * Math.PI * 420 * t) * 0.25 + Math.sin(2 * Math.PI * 660 * t) * 0.12;
-      view.setInt16(44 + index * 2, sample * 0x7fff, true);
-    }
-
-    const blob = new Blob([buffer], { type: 'audio/wav' });
-    return blobToDataUrl(blob);
-  };
-
-  const stopVoiceRecording = () => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop();
-    }
-  };
-
-  const startVoiceRecording = async () => {
-    if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setVoiceError('Микрофон недоступен в этом браузере');
-      const fallbackVoice = await createFallbackVoiceNote();
-      setVoicePreview(fallbackVoice);
-      setIsRecording(false);
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      const chunks: BlobPart[] = [];
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunks.push(event.data);
-        }
-      };
-      recorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
-        const voiceUrl = chunks.length > 0 ? await blobToDataUrl(blob) : await createFallbackVoiceNote();
-        setVoicePreview(voiceUrl);
-        setIsRecording(false);
-        stream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-        mediaRecorderRef.current = null;
-      };
-      recorder.onerror = () => {
-        setVoiceError('Не удалось записать голосовое сообщение');
-        setIsRecording(false);
-        stream.getTracks().forEach((track) => track.stop());
-      };
-      recorder.start();
-      mediaRecorderRef.current = recorder;
-      streamRef.current = stream;
-      setVoiceError(null);
-      setIsRecording(true);
-    } catch {
-      setVoiceError('Доступ к микрофону запрещён');
-      const fallbackVoice = await createFallbackVoiceNote();
-      setVoicePreview(fallbackVoice);
-      setIsRecording(false);
-    }
-  };
-
-  const handleVoiceNote = async () => {
-    if (isRecording) {
-      stopVoiceRecording();
-      return;
-    }
-
-    if (voicePreview) {
-      setVoicePreview(null);
-      setVoiceError(null);
-      return;
-    }
-
-    await startVoiceRecording();
-  };
-
-  useEffect(() => {
-    if (!sharedVideo?.videoId || sharedVideo.status !== 'playing') return;
-    const timer = window.setInterval(() => {
-      setPlayerCurrentTime((prev) => {
-        const next = prev + 1;
-        void pushVideoState('playing', next);
-        return next;
-      });
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [sharedVideo?.videoId, sharedVideo?.status]);
-
-  useEffect(() => {
-    if (!sharedVideo?.videoId) return;
-    const timer = window.setInterval(() => {
-      void fetch(`/api/chats/${encodeURIComponent(chat.id)}/video`).then(async (response) => {
-        if (!response.ok) return;
-        const nextVideo = (await response.json()) as SharedVideoState | null;
-        if (!nextVideo?.videoId) return;
-        if ((nextVideo.status || 'paused') !== (sharedVideo.status || 'paused')) {
-          setPlayerAutoplay(nextVideo.status === 'playing');
-          setPlayerCurrentTime(nextVideo.currentTime ?? 0);
-          setPlayerRefreshToken((value) => value + 1);
-        }
-      }).catch(() => undefined);
-    }, 2500);
-    return () => window.clearInterval(timer);
-  }, [chat.id, sharedVideo?.videoId, sharedVideo?.status]);
-
   const mood = useMemo(() => calculateChatMood(chat.messages), [chat.messages]);
   const otherMembers = members.filter((member) => member.id !== currentUser.id);
   const title = chat.title || (otherMembers[0]?.displayName ?? 'Чат');
@@ -327,57 +134,22 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     if (!draft.trim() && !pendingImage && !pendingSticker && !voicePreview) return;
     const normalized = draft.trim();
     onSend(chat.id, normalized, pendingImage ?? undefined, pendingSticker ?? undefined, voicePreview ?? undefined);
-    const replyName = otherMembers[0]?.displayName || 'участник';
-    setTypingUser(replyName);
-    window.setTimeout(() => setTypingUser(null), 1800);
     setDraft('');
     setPendingImage(null);
     setPendingSticker(null);
     setVoicePreview(null);
-    setVoiceError(null);
-    setIsRecording(false);
     setShowGifPicker(false);
   };
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const savedDraft = window.localStorage.getItem(`${DRAFT_STORAGE_PREFIX}${chat.id}`) || '';
-    setDraft(savedDraft);
-  }, [chat.id]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(`${DRAFT_STORAGE_PREFIX}${chat.id}`, draft);
-  }, [chat.id, draft]);
-
-  useEffect(() => {
+    setDraft('');
     setPendingImage(null);
     setPendingSticker(null);
     setVoicePreview(null);
-    setVoiceError(null);
-    setIsRecording(false);
     setShowGifPicker(false);
     setSearchQuery('');
     setActiveView('chat');
-    setTypingUser(null);
-
-    const timer = window.setTimeout(() => {
-      const other = otherMembers[0]?.displayName || 'участник';
-      setTypingUser(other);
-      window.setTimeout(() => setTypingUser(null), 1800);
-    }, 900);
-
-    return () => window.clearTimeout(timer);
   }, [chat.id]);
-
-  useEffect(() => {
-    return () => {
-      if (mediaRecorderRef.current?.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-    };
-  }, []);
 
   const currentVoteCount = chat.deleteVotes?.length ?? 0;
   const requiredVotes = chat.isGroup ? Math.floor(chat.members.length / 2) + 1 : chat.members.length;
@@ -398,16 +170,6 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     };
     reader.readAsDataURL(file);
     event.target.value = '';
-  };
-
-  const handleAttachmentDrop = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setDragActive(false);
-    const [file] = Array.from(event.dataTransfer?.files || []);
-    if (!file?.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = () => setPendingImage(String(reader.result));
-    reader.readAsDataURL(file);
   };
 
   const handleGroupAvatarPick = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -435,51 +197,19 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
   ];
   const reactionOptions = ['👍', '❤️', '😂', '🔥', '🎉', '🙏'];
 
+  const handleVoiceNote = () => {
+    if (voicePreview) {
+      setVoicePreview(null);
+      return;
+    }
+    setVoicePreview('voice-note');
+  };
+
   const filteredMessages = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return chat.messages;
     return chat.messages.filter((message) => message.text.toLowerCase().includes(query) || (message.imageUrl || '').toLowerCase().includes(query));
   }, [chat.messages, searchQuery]);
-
-  const groupedMessages = useMemo(() => {
-    const groups: Array<{ type: 'day'; key: string; label: string } | { type: 'message'; message: Message }> = [];
-    let lastLabel: string | null = null;
-
-    filteredMessages.forEach((message) => {
-      const label = formatDayLabel(message.createdAt);
-      if (label !== lastLabel) {
-        groups.push({ type: 'day', key: label, label });
-        lastLabel = label;
-      }
-      groups.push({ type: 'message', message });
-    });
-
-    return groups;
-  }, [filteredMessages]);
-
-  const pinnedMessage = useMemo(() => { 
-    return chat.messages.find((message) => message.id === chat.pinnedMessageId) ?? null;
-  }, [chat.messages, chat.pinnedMessageId]);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  };
-
-  const handleMessagesScroll = () => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-    const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 140;
-    setShowScrollButton(!nearBottom);
-  };
-
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-    handleMessagesScroll();
-    if (container.scrollHeight - container.scrollTop - container.clientHeight < 160) {
-      scrollToBottom();
-    }
-  }, [chat.id, filteredMessages.length]);
 
   const triggerDeleteAnimation = (messageId: string, scope: 'forMe' | 'forEveryone') => {
     setSelectedMessageId(null);
@@ -499,13 +229,6 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
     const nextAvatar = groupAvatarUrl.trim() || undefined;
     onUpdateChat(chat.id, { title: nextTitle, avatarUrl: nextAvatar });
     setShowGroupSettings(false);
-  };
-
-  const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      handleSend();
-    }
   };
 
   const canManageGroup = chat.creatorId === currentUser.id;
@@ -539,8 +262,8 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
             {activeView === 'chat' ? 'Поиск' : 'Чат'}
           </button>
           {chat.isGroup && (
-            <button type="button" onClick={() => setShowGroupSettings(true)} className="secondary-button group-settings-trigger">
-              ⚙ Настройки
+            <button type="button" onClick={() => setShowGroupSettings(true)} className="secondary-button">
+              Настройки
             </button>
           )}
           <button type="button" onClick={() => onVoteDelete(chat.id)} className="delete-vote-button">
@@ -554,20 +277,13 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
           <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Поиск по сообщениям" />
         </div>
       )}
-      <div className="messages" ref={messagesContainerRef} onScroll={handleMessagesScroll}>
-        {pinnedMessage ? (
-          <div className="pinned-message-banner">
-            <span className="pinned-message-label">📌 Закреплено</span>
-            <span>{pinnedMessage.text || 'Вложение'}</span>
-          </div>
-        ) : null}
+      <div className="messages">
         {sharedVideo ? (
           <div className="shared-video-card">
             <div className="shared-video-title-row">
               <div>
                 <div className="shared-video-title">🎬 Совместный просмотр</div>
                 <div className="shared-video-copy">{sharedVideo.channel} · {sharedVideo.title}</div>
-                {sharedVideo.sourceUrl ? <div className="shared-video-copy">Источник: {sharedVideo.sourceUrl}</div> : null}
               </div>
               <button type="button" className="secondary-button shared-video-close" onClick={() => setSharedVideo(null)}>
                 Закрыть
@@ -576,12 +292,9 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
             <div id={`youtube-player-shell-${chat.id}`} className="shared-video-player">
               {embedVideoUrl ? (
                 <iframe
-                  key={`${embedVideoUrl}-${playerRefreshToken}`}
+                  key={embedVideoUrl}
                   src={embedVideoUrl}
                   title={sharedVideo.title}
-                  onError={() => {
-                    setPlayerProvider((current) => current === 'youtube-nocookie' ? 'youtube' : 'youtube-nocookie');
-                  }}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
                 />
@@ -596,27 +309,10 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
             <div className="shared-video-footer">Запустил {sharedVideo.startedBy}</div>
           </div>
         ) : null}
-        {typingUser ? (
-          <div className="typing-indicator">
-            <span className="typing-dot" />
-            <span className="typing-dot" />
-            <span className="typing-dot" />
-            <span>{typingUser} печатает…</span>
-          </div>
-        ) : null}
         {filteredMessages.length === 0 ? (
           <div className="empty-search">Нет сообщений в этом чате</div>
         ) : (
-          groupedMessages.map((entry) => {
-            if (entry.type === 'day') {
-              return (
-                <div key={entry.key} className="message-day-separator">
-                  <span>{entry.label}</span>
-                </div>
-              );
-            }
-
-            const message = entry.message;
+          filteredMessages.map((message) => {
             const hiddenForMe = (message.deletedFor || []).includes(currentUser.id);
             if (hiddenForMe) return null;
             const isMine = message.senderId === currentUser.id;
@@ -662,11 +358,6 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
           })
         )}
         <div ref={messagesEndRef} />
-        {showScrollButton ? (
-          <button type="button" className="scroll-to-bottom" onClick={scrollToBottom}>
-            ↓
-          </button>
-        ) : null}
       </div>
       {selectedMessageId ? (
         <div className="message-actions-sheet">
@@ -678,34 +369,16 @@ export default function ChatView({ chat, currentUser, members, onSend, onVoteDel
           <button type="button" onClick={() => setSelectedMessageId(null)}>Отмена</button>
         </div>
       ) : null}
-      <div
-        className={`message-input ${dragActive ? 'drag-active' : ''}`}
-        onDragEnter={(event) => {
-          event.preventDefault();
-          setDragActive(true);
-        }}
-        onDragOver={(event) => {
-          event.preventDefault();
-          setDragActive(true);
-        }}
-        onDragLeave={(event) => {
-          event.preventDefault();
-          setDragActive(false);
-        }}
-        onDrop={handleAttachmentDrop}
-      >
+      <div className="message-input">
         {pendingImage ? <img src={pendingImage} alt="preview" className="image-preview" /> : null}
         {pendingSticker ? <img src={pendingSticker} alt="sticker preview" className="image-preview" /> : null}
-        {dragActive ? <div className="drag-hint">Отпустите картинку, чтобы добавить вложение</div> : null}
-        {voicePreview ? <div className="voice-preview">{isRecording ? 'Идёт запись…' : 'Голосовое сообщение готово'}</div> : null}
-        {voiceError ? <div className="voice-preview voice-preview-error">{voiceError}</div> : null}
-        <div className="composer-hint">Enter — отправить, Shift + Enter — новая строка</div>
-        <textarea value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={handleComposerKeyDown} placeholder={'Напишите сообщение... или !смотреть "канал" "видео" / ссылка'} />
+        {voicePreview ? <div className="voice-preview">Голосовое сообщение готово</div> : null}
+        <textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={'Напишите сообщение... или !смотреть "канал" "видео"'} />
         <div className="composer-actions">
           <button type="button" className="secondary-button" onClick={() => setShowGifPicker((prev) => !prev)}>
             GIF
           </button>
-          <button type="button" className="secondary-button" onClick={() => void handleVoiceNote()}>{isRecording ? 'Остановить' : voicePreview ? 'Сброс' : 'Запись'}</button>
+          <button type="button" className="secondary-button" onClick={handleVoiceNote}>{voicePreview ? 'Сброс' : 'Голосовое'}</button>
           <label className="composer-icon-button">
             <span>📷</span>
             <span>Фото</span>

@@ -35,7 +35,6 @@ export default function UserList({ users, onSelectUser }: Props) {
               <div className="user-title">{user.displayName}</div>
               <div className="user-meta">{user.username}</div>
               <div className="user-bio">{user.bio}</div>
-              <div className={`presence-chip ${user.isOnline ? 'online' : 'offline'}`}>{user.isOnline ? 'В сети' : 'Не в сети'}</div>
             </div>
           </div>
         ))

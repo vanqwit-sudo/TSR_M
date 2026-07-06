@@ -9,6 +9,8 @@ export interface UserProfile {
   avatarUrl: string;
   borderColor: string;
   nameColor: string;
+  isOnline?: boolean;
+  lastSeenAt?: string;
 }
 
 export interface User extends UserProfile {

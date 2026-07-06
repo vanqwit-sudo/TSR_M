@@ -1,4 +1,4 @@
-import { useEffect, useState, type DragEvent } from 'react';
+import { useEffect, useState } from 'react';
 import type { UserProfile } from '../utils/data';
 import Avatar from './Avatar';
 
@@ -39,7 +39,6 @@ async function resizeAvatar(file: File, size: number) {
 
 export default function ProfileEditor({ profile, onUpdate }: Props) {
   const [local, setLocal] = useState(profile);
-  const [dragActive, setDragActive] = useState(false);
 
   useEffect(() => {
     setLocal(profile);
@@ -48,19 +47,6 @@ export default function ProfileEditor({ profile, onUpdate }: Props) {
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    try {
-      const avatarUrl = await resizeAvatar(file, 120);
-      setLocal({ ...local, avatarUrl });
-    } catch (error) {
-      console.error('Не удалось загрузить аватар', error);
-    }
-  };
-
-  const handleDropAvatar = async (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setDragActive(false);
-    const [file] = Array.from(event.dataTransfer?.files || []);
-    if (!file?.type.startsWith('image/')) return;
     try {
       const avatarUrl = await resizeAvatar(file, 120);
       setLocal({ ...local, avatarUrl });
@@ -81,22 +67,7 @@ export default function ProfileEditor({ profile, onUpdate }: Props) {
   return (
     <div className="profile-editor">
       <div className="profile-preview-card">
-        <div
-          className={`avatar-wrapper ${dragActive ? 'drag-active' : ''}`}
-          onDragEnter={(event) => {
-            event.preventDefault();
-            setDragActive(true);
-          }}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setDragActive(true);
-          }}
-          onDragLeave={(event) => {
-            event.preventDefault();
-            setDragActive(false);
-          }}
-          onDrop={handleDropAvatar}
-        >
+        <div className="avatar-wrapper">
           <Avatar className="avatar" src={local.avatarUrl} alt="Аватар" name={local.displayName} size={96} />
           <div className="status-badge">{local.statusEmoji}</div>
           <div className="avatar-frame" style={{ borderColor: local.borderColor }} />

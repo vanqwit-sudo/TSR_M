@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ThemeContext, themeStyles } from './utils/theme';
 import { DeviceContext, getDeviceType } from './utils/device';
 import type { Chat, User, UserProfile } from './utils/data';
@@ -16,7 +16,6 @@ import {
   logout,
   pinMessage,
   registerWithPhone,
-  searchUsers,
   sendMessage,
   updateChat,
   updateUserProfile,
@@ -31,34 +30,6 @@ import CreateChat from './components/CreateChat';
 import UserList from './components/UserList';
 import './styles.css';
 
-const APP_STATE_STORAGE_KEY = 'tsr_m_app_state_v1';
-const PRESENCE_TTL_MS = 30_000;
-const PRESENCE_PULSE_MS = 10_000;
-
-function playIncomingMessageSound() {
-  if (typeof window === 'undefined') return;
-  const AudioContextCtor = window.AudioContext ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioContextCtor) return;
-
-  const context = new AudioContextCtor();
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-
-  oscillator.type = 'sine';
-  oscillator.frequency.setValueAtTime(880, context.currentTime);
-  oscillator.frequency.exponentialRampToValueAtTime(1320, context.currentTime + 0.12);
-
-  gain.gain.setValueAtTime(0.0001, context.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.05, context.currentTime + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.24);
-
-  oscillator.connect(gain);
-  gain.connect(context.destination);
-  oscillator.start();
-  oscillator.stop(context.currentTime + 0.25);
-  void context.close().catch(() => undefined);
-}
-
 function loadPersistedProfile(user: User | null) {
   if (!user || typeof window === 'undefined') return null;
   try {
@@ -71,37 +42,20 @@ function loadPersistedProfile(user: User | null) {
   }
 }
 
-function readPersistedAppState() {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem(APP_STATE_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { currentUser: User | null; users: User[]; chats: Chat[]; activeChatId: string | null };
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function writePersistedAppState(currentUser: User | null, users: User[], chats: Chat[], activeChatId: string | null) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(
-      APP_STATE_STORAGE_KEY,
-      JSON.stringify({ currentUser, users, chats, activeChatId }),
-    );
-  } catch {
-    // ignore storage errors
-  }
-}
-
 function App() {
-  const theme = 'light' as const;
-  const persistedAppState = readPersistedAppState();
-  const [currentUser, setCurrentUser] = useState<User | null>(persistedAppState?.currentUser ?? null);
-  const [users, setUsers] = useState<User[]>(persistedAppState?.users ?? []);
-  const [chats, setChats] = useState<Chat[]>(persistedAppState?.chats ?? []);
-  const [activeChatId, setActiveChatId] = useState<string | null>(persistedAppState?.activeChatId ?? null);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window === 'undefined') return 'light';
+    try {
+      const saved = window.localStorage.getItem('tsr_m_theme');
+      return saved === 'dark' ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  });
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [searchMode, setSearchMode] = useState<'chats' | 'users'>('chats');
   const [showProfile, setShowProfile] = useState(false);
@@ -113,17 +67,7 @@ function App() {
   const [profileViewerUser, setProfileViewerUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [userSearchResults, setUserSearchResults] = useState<User[]>([]);
-  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
-  const [highlightedChatId, setHighlightedChatId] = useState<string | null>(null);
   const [device] = useState(getDeviceType());
-  const previousChatsRef = useRef<Chat[]>(persistedAppState?.chats ?? []);
-
-  const syncPresence = (userId?: string | null) => {
-    const now = new Date().toISOString();
-    setCurrentUser((prev) => (prev ? { ...prev, isOnline: true, lastSeenAt: now } : prev));
-    setUsers((prev) => prev.map((user) => (user.id === (userId ?? currentUser?.id) ? { ...user, isOnline: true, lastSeenAt: now } : user)));
-  };
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('Notification' in window)) return;
@@ -137,103 +81,47 @@ function App() {
   }, []);
 
   useEffect(() => {
-    document.body.dataset.theme = 'light';
+    document.body.dataset.theme = theme;
     if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('tsr_m_theme');
+      window.localStorage.setItem('tsr_m_theme', theme);
     }
-  }, []);
+    return () => {
+      document.body.dataset.theme = 'light';
+    };
+  }, [theme]);
 
   useEffect(() => {
-    writePersistedAppState(currentUser, users, chats, activeChatId);
-  }, [currentUser, users, chats, activeChatId]);
-
-  useEffect(() => {
-    previousChatsRef.current = chats;
-  }, [chats]);
-
-  useEffect(() => {
-    if (!currentUser?.id || typeof window === 'undefined') return;
-
-    const handleActivity = () => syncPresence(currentUser.id);
-    const presenceTimer = window.setInterval(() => {
-      const now = Date.now();
-      setUsers((prev) => prev.map((user) => {
-        if (user.id === currentUser.id) {
-          return { ...user, isOnline: true, lastSeenAt: new Date().toISOString() };
-        }
-        const lastSeenAt = user.lastSeenAt ? Date.parse(user.lastSeenAt) : now - PRESENCE_TTL_MS;
-        return { ...user, isOnline: now - lastSeenAt < PRESENCE_TTL_MS };
-      }));
-      setCurrentUser((prev) => (prev ? { ...prev, isOnline: true, lastSeenAt: new Date().toISOString() } : prev));
-    }, PRESENCE_PULSE_MS);
+    if (!currentUser) return;
 
     const refreshTimer = window.setInterval(() => {
       refreshChats();
     }, 5000);
 
-    // Client-side presence simulator to make online/offline indicators feel live
-    const presenceSimTimer = window.setInterval(() => {
-      setUsers((prev) => prev.map((user) => {
-        if (user.id === currentUser.id) return user;
-        if (Math.random() < 0.12) {
-          const now = Date.now();
-          const lastSeen = now - Math.floor(Math.random() * PRESENCE_TTL_MS * 0.6);
-          return { ...user, isOnline: Math.random() < 0.5, lastSeenAt: new Date(lastSeen).toISOString() };
-        }
-        return user;
-      }));
-    }, 7000);
+    const handleFocus = () => {
+      refreshChats();
+    };
 
-    window.addEventListener('mousemove', handleActivity);
-    window.addEventListener('keydown', handleActivity);
-    window.addEventListener('touchstart', handleActivity);
-    window.addEventListener('focus', handleActivity);
-
-    handleActivity();
+    window.addEventListener('focus', handleFocus);
 
     return () => {
-      window.clearInterval(presenceTimer);
       window.clearInterval(refreshTimer);
-      window.clearInterval(presenceSimTimer);
-      window.removeEventListener('mousemove', handleActivity);
-      window.removeEventListener('keydown', handleActivity);
-      window.removeEventListener('touchstart', handleActivity);
-      window.removeEventListener('focus', handleActivity);
+      window.removeEventListener('focus', handleFocus);
     };
-  }, [currentUser?.id]);
+  }, [currentUser, activeChatId]);
 
   const loadInitialState = async () => {
     setLoading(true);
-    const persistedState = readPersistedAppState();
-    if (persistedState?.currentUser) {
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem('tsr_m_current_user_id', persistedState.currentUser.id);
-      }
-      setCurrentUser(persistedState.currentUser);
-      setUsers(persistedState.users ?? []);
-      setChats(persistedState.chats ?? []);
-      setActiveChatId(persistedState.activeChatId ?? null);
-    }
+    const user = await getCurrentUser();
+    const allUsers = await getAllUsers();
+    const restoredProfile = loadPersistedProfile(user);
+    const hydratedUser = user && restoredProfile ? { ...user, ...restoredProfile } : user;
+    setCurrentUser(hydratedUser);
+    setUsers(allUsers.map((item) => (item.id === hydratedUser?.id ? { ...item, ...restoredProfile } : item)));
 
-    try {
-      const user = await getCurrentUser();
-      const allUsers = await getAllUsers();
-      const restoredProfile = loadPersistedProfile(user);
-      const baseUser = user ?? persistedState?.currentUser ?? null;
-      const hydratedUser = baseUser && restoredProfile ? { ...baseUser, ...restoredProfile } : baseUser;
-      setCurrentUser(hydratedUser);
-      setUsers(allUsers.map((item) => (item.id === hydratedUser?.id ? { ...item, ...restoredProfile } : item)));
-
-      if (hydratedUser?.id) {
-        const userChats = await getChatsForUser(hydratedUser.id);
-        setChats(userChats);
-        setActiveChatId((prev) => {
-          if (prev && userChats.some((chat) => chat.id === prev)) return prev;
-          return userChats[0]?.id ?? null;
-        });
-      }
-    } catch {
-      // keep the persisted state if the server is unavailable
+    if (hydratedUser) {
+      const userChats = await getChatsForUser(hydratedUser.id);
+      setChats(userChats);
+      setActiveChatId(userChats[0]?.id ?? null);
     }
 
     setLoading(false);
@@ -241,48 +129,10 @@ function App() {
 
   const refreshChats = async () => {
     if (!currentUser) return;
-    try {
-      const userChats = await getChatsForUser(currentUser.id);
-      const previousChats = previousChatsRef.current;
-
-      userChats.forEach((chat) => {
-        const previousChat = previousChats.find((item) => item.id === chat.id);
-        if (!previousChat) return;
-        const previousMessages = previousChat.messages ?? [];
-        const nextMessages = chat.messages ?? [];
-        if (nextMessages.length <= previousMessages.length) return;
-
-        const incomingMessages = nextMessages.slice(previousMessages.length).filter((message) => message.senderId !== currentUser.id);
-        if (!incomingMessages.length) return;
-
-        if (activeChatId === chat.id) {
-          setUnreadCounts((prev) => ({ ...prev, [chat.id]: 0 }));
-          return;
-        }
-
-        setHighlightedChatId(chat.id);
-        window.setTimeout(() => {
-          setHighlightedChatId((prev) => (prev === chat.id ? null : prev));
-        }, 1400);
-        setUnreadCounts((prev) => ({ ...prev, [chat.id]: (prev[chat.id] || 0) + incomingMessages.length }));
-        playIncomingMessageSound();
-        setUsers((prev) => prev.map((user) => (user.id === incomingMessages[0].senderId ? { ...user, isOnline: true, lastSeenAt: new Date().toISOString() } : user)));
-        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-          const sender = users.find((user) => user.id === incomingMessages[0].senderId);
-          new Notification(`${sender?.displayName || 'Новое сообщение'}`, {
-            body: incomingMessages[0].text || 'У вас новое сообщение',
-            icon: sender?.avatarUrl || '/vite.svg',
-          });
-        }
-      });
-
-      setChats(userChats);
-      previousChatsRef.current = userChats;
-      if (!userChats.some((chat) => chat.id === activeChatId)) {
-        setActiveChatId(userChats[0]?.id ?? null);
-      }
-    } catch {
-      // keep current chats if the server is temporarily unavailable
+    const userChats = await getChatsForUser(currentUser.id);
+    setChats(userChats);
+    if (!userChats.some((chat) => chat.id === activeChatId)) {
+      setActiveChatId(userChats[0]?.id ?? null);
     }
   };
 
@@ -328,16 +178,6 @@ function App() {
     setCurrentUser(null);
     setChats([]);
     setActiveChatId(null);
-    setUnreadCounts({});
-  };
-
-  const handleSelectChat = (chatId: string) => {
-    setActiveChatId(chatId);
-    setUnreadCounts((prev) => ({ ...prev, [chatId]: 0 }));
-    syncPresence(currentUser?.id);
-    if (typeof window !== 'undefined' && window.innerWidth <= 760) {
-      setSidebarOpen(false);
-    }
   };
 
   const handleProfileUpdate = async (updates: Partial<UserProfile>) => {
@@ -369,21 +209,24 @@ function App() {
 
     const created = await createChat(user.displayName, [user.username], false, currentUser.id);
     setChats((prev) => [created, ...prev]);
-    handleSelectChat(created.id);
+    setActiveChatId(created.id);
     setProfileViewerUser(null);
+    setSidebarOpen(false);
   };
 
   const handleCreateChat = async (title: string, participants: string, isGroup: boolean) => {
     if (!currentUser) return;
     const created = await createChat(title, participants.split(',').map((value) => value.trim()).filter(Boolean), isGroup, currentUser.id);
     setChats((prev) => [created, ...prev]);
-    handleSelectChat(created.id);
+    setActiveChatId(created.id);
     setShowCreateChat(false);
+    if (typeof window !== 'undefined' && window.innerWidth <= 760) {
+      setSidebarOpen(false);
+    }
   };
 
   const handleSendMessage = async (chatId: string, text: string, imageUrl?: string, stickerUrl?: string, voiceUrl?: string) => {
     if (!currentUser) return;
-    syncPresence(currentUser.id);
     await sendMessage(chatId, currentUser.id, text, imageUrl, stickerUrl, voiceUrl);
     await refreshChats();
   };
@@ -485,41 +328,9 @@ function App() {
   );
 
   const chatResults = searchMode === 'chats' ? (searchResults as Chat[]) : filteredChats;
-  const userResults = searchMode === 'users' ? userSearchResults : users;
-
-  useEffect(() => {
-    let active = true;
-    if (searchMode !== 'users') {
-      setUserSearchResults(users);
-      return;
-    }
-
-    const query = search.trim();
-    if (!query) {
-      setUserSearchResults(users);
-      return;
-    }
-
-    void (async () => {
-      try {
-        const results = await searchUsers(query);
-        if (active) {
-          setUserSearchResults(results);
-        }
-      } catch {
-        if (active) {
-          setUserSearchResults(users.filter((user) => `${user.displayName} ${user.username}`.toLowerCase().includes(query.toLowerCase())));
-        }
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [search, searchMode, users]);
+  const userResults = searchMode === 'users' ? (searchResults as User[]) : users;
 
   const appStyle = themeStyles[theme];
-  const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
 
   if (loading) {
     return <div className="loading-screen">Загрузка TSR_M...</div>;
@@ -539,7 +350,7 @@ function App() {
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme: () => undefined }}>
+    <ThemeContext.Provider value={{ theme, setTheme }}>
       <DeviceContext.Provider value={device}>
         <div className={`app ${theme} ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} style={appStyle.app}>
           <button
@@ -554,101 +365,36 @@ function App() {
             {sidebarOpen ? (
               <div className="sidebar-panel-content">
                 <div className="sidebar-topbar">
-                  <div className="brand-block">
-                    <button type="button" className="brand brand-button" onClick={() => setSidebarOpen((prev) => !prev)}>
-                      TSR_M
-                    </button>
-                    <div className="brand-caption" />
+                  <button type="button" className="brand brand-button" onClick={() => setSidebarOpen((prev) => !prev)}>
+                    ☰
+                  </button>
+                  <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="theme-toggle compact-theme-toggle">
+                    {theme === 'light' ? '🌙' : '☀️'}
+                  </button>
+                </div>
+                <div className="sidebar-profile-summary">
+                  <div className="avatar-wrapper">
+                    <Avatar className="sidebar-avatar" src={currentUser.avatarUrl} alt="avatar" name={currentUser.displayName} size={52} />
+                    <span className="status-dot status-dot-small">{currentUser.statusEmoji}</span>
+                  </div>
+                  <div className="sidebar-profile-text">
+                    <div className="sidebar-profile-name">{currentUser.displayName}</div>
+                    <div className="sidebar-profile-username">{currentUser.username}</div>
                   </div>
                 </div>
-                <div className="sidebar-search">
-                  <input
-                    type="text"
-                    placeholder="Поиск по чатам и людям"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
+                <div className="sidebar-block">
+                  <div className="sidebar-top">
+                    <div className="sidebar-title">Управление</div>
+                    <button className="sidebar-action" type="button" onClick={() => { setShowProfile((prev) => !prev); setShowCreateChat(false); }}>
+                      {showProfile ? 'Скрыть профиль' : 'Профиль'}
+                    </button>
+                    <button className="sidebar-action" type="button" onClick={() => { setShowCreateChat((prev) => !prev); setShowProfile(false); }}>
+                      {showCreateChat ? 'Скрыть чат' : 'Новый чат'}
+                    </button>
+                  </div>
+                  {showProfile && <ProfileEditor profile={currentUser} onUpdate={handleProfileUpdate} />}
+                  {showCreateChat && <CreateChat onCreate={handleCreateChat} />}
                 </div>
-                <div className="compact-search-mode sidebar-search-mode">
-                  <button type="button" className={searchMode === 'chats' ? 'active' : ''} onClick={() => setSearchMode('chats')}>
-                    Чаты
-                  </button>
-                  <button type="button" className={searchMode === 'users' ? 'active' : ''} onClick={() => setSearchMode('users')}>
-                    Люди
-                  </button>
-                </div>
-                {!isMobileViewport ? (
-                  <>
-                    <div className="sidebar-profile-summary">
-                      <div className="avatar-wrapper">
-                        <Avatar className="sidebar-avatar" src={currentUser.avatarUrl} alt="avatar" name={currentUser.displayName} size={52} />
-                        <span className="status-dot status-dot-small">{currentUser.statusEmoji}</span>
-                      </div>
-                      <div className="sidebar-profile-text">
-                        <div className="sidebar-profile-name">{currentUser.displayName}</div>
-                        <div className="sidebar-profile-username">{currentUser.username}</div>
-                        <div className={`presence-chip ${currentUser.isOnline ? 'online' : 'offline'}`}>{currentUser.isOnline ? 'В сети' : 'Не в сети'}</div>
-                      </div>
-                    </div>
-                    <div className="sidebar-block">
-                      <div className="sidebar-top">
-                        <div className="sidebar-title">Управление</div>
-                        <button className="sidebar-action" type="button" onClick={() => { setShowProfile((prev) => !prev); setShowCreateChat(false); }}>
-                          {showProfile ? 'Скрыть профиль' : 'Профиль'}
-                        </button>
-                        <button className="sidebar-action" type="button" onClick={() => { setShowCreateChat((prev) => !prev); setShowProfile(false); }}>
-                          {showCreateChat ? 'Скрыть чат' : 'Новый чат'}
-                        </button>
-                      </div>
-                      {showProfile && <ProfileEditor profile={currentUser} onUpdate={handleProfileUpdate} />}
-                      {showCreateChat && <CreateChat onCreate={handleCreateChat} />}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="sidebar-block">
-                      <div className="sidebar-top">
-                        <div className="sidebar-title">Чаты</div>
-                        <button className="sidebar-action" type="button" onClick={() => { setShowCreateChat((prev) => !prev); setShowProfile(false); }}>
-                          {showCreateChat ? 'Скрыть чат' : 'Новый чат'}
-                        </button>
-                      </div>
-                      <div className="chat-selector-list mobile-chat-selector-list">
-                        {searchMode === 'users' ? (
-                          <UserList
-                            users={userResults}
-                            onSelectUser={(user) => {
-                              setProfileViewerUser(user);
-                              setSidebarOpen(false);
-                            }}
-                          />
-                        ) : (
-                          <ChatList
-                            chats={chatResults}
-                            users={users}
-                            activeId={activeChatId}
-                            unreadCounts={unreadCounts}
-                            highlightedChatId={highlightedChatId}
-                            onSelect={(id) => {
-                              handleSelectChat(id);
-                              setSidebarOpen(false);
-                            }}
-                          />
-                        )}
-                      </div>
-                    </div>
-                    <div className="sidebar-block">
-                      <div className="sidebar-top">
-                        <div className="sidebar-title">Управление</div>
-                        <button className="sidebar-action" type="button" onClick={() => { setShowProfile((prev) => !prev); setShowCreateChat(false); }}>
-                          {showProfile ? 'Скрыть профиль' : 'Профиль'}
-                        </button>
-                      </div>
-                      {showProfile && <ProfileEditor profile={currentUser} onUpdate={handleProfileUpdate} />}
-                      {showCreateChat && <CreateChat onCreate={handleCreateChat} />}
-                    </div>
-                  </>
-                )}
                 <button className="logout-button" onClick={handleLogout}>
                   Выйти
                 </button>
@@ -688,10 +434,8 @@ function App() {
                       chats={chatResults}
                       users={users}
                       activeId={activeChatId}
-                      unreadCounts={unreadCounts}
-                      highlightedChatId={highlightedChatId}
                       onSelect={(id) => {
-                        handleSelectChat(id);
+                        setActiveChatId(id);
                         if (typeof window !== 'undefined' && window.innerWidth <= 760) {
                           setSidebarOpen(false);
                         }
@@ -713,7 +457,7 @@ function App() {
                     <div className="mobile-chat-title">{activeChat.title}</div>
                     <div className="mobile-chat-subtitle">{activeChat.isGroup ? `${activeChat.members.length} участников` : 'Переписка'}</div>
                   </div>
-                  <button type="button" className="mobile-chat-action" onClick={() => { setShowCreateChat(true); setSidebarOpen(true); }}>
+                  <button type="button" className="mobile-chat-action" onClick={() => setShowCreateChat(true)}>
                     +
                   </button>
                 </div>
@@ -737,7 +481,7 @@ function App() {
               <div className="empty-state-card">
                 <div className="empty-state-title">Начните общение</div>
                 <div className="empty-state-copy">Создайте чат или откройте существующий, чтобы продолжить переписку.</div>
-                <button type="button" className="primary-button" onClick={() => { setShowCreateChat(true); setSidebarOpen(true); }}>
+                <button type="button" className="primary-button" onClick={() => setShowCreateChat(true)}>
                   Создать чат
                 </button>
                 <button type="button" className="secondary-button" onClick={() => setSidebarOpen(true)} style={{ marginTop: 10 }}>
@@ -774,9 +518,7 @@ function App() {
                 <div className="profile-view-meta">
                   <div className="profile-view-meta-item">
                     <span className="profile-view-meta-label">Статус</span>
-                    <span className={`profile-view-meta-value presence-chip ${profileViewerUser.isOnline ? 'online' : 'offline'}`}>
-                      {profileViewerUser.isOnline ? 'В сети' : 'Не в сети'} · {profileViewerUser.statusEmoji}
-                    </span>
+                    <span className="profile-view-meta-value">В сети · {profileViewerUser.statusEmoji}</span>
                   </div>
                   {profileViewerUser.phone ? (
                     <div className="profile-view-meta-item">

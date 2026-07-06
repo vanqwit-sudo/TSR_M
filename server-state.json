@@ -1,4 +1,81 @@
 {
-  "users": [],
-  "chats": []
+  "users": [
+    {
+      "id": "u1",
+      "username": "@alex",
+      "displayName": "Alex",
+      "bio": "Designing the next big thing",
+      "statusEmoji": "🙂",
+      "avatarUrl": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80",
+      "borderColor": "#4f46e5",
+      "nameColor": "#111827",
+      "phone": "+70000000001",
+      "password": "123456",
+      "googleEmail": ""
+    },
+    {
+      "id": "u2",
+      "username": "@maria",
+      "displayName": "Maria",
+      "bio": "Coffee, code, and calm mornings",
+      "statusEmoji": "😊",
+      "avatarUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80",
+      "borderColor": "#ec4899",
+      "nameColor": "#111827",
+      "phone": "+70000000002",
+      "password": "123456",
+      "googleEmail": ""
+    },
+    {
+      "id": "u3",
+      "username": "@dima",
+      "displayName": "Dima",
+      "bio": "Building useful tools",
+      "statusEmoji": "👍",
+      "avatarUrl": "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=120&q=80",
+      "borderColor": "#0f766e",
+      "nameColor": "#111827",
+      "phone": "+70000000003",
+      "password": "123456",
+      "googleEmail": ""
+    }
+  ],
+  "chats": [
+    {
+      "id": "chat-demo",
+      "title": "Design Sync",
+      "members": ["u1", "u2"],
+      "messages": [
+        {
+          "id": "chat-demo-1",
+          "senderId": "u1",
+          "text": "Привет! Сегодня посмотрим обновления по интерфейсу.",
+          "createdAt": "2026-06-24T12:00:00.000Z"
+        },
+        {
+          "id": "chat-demo-2",
+          "senderId": "u2",
+          "text": "Отлично, я уже подготовила несколько вариантов.",
+          "createdAt": "2026-06-24T12:02:00.000Z"
+        }
+      ],
+      "isGroup": false,
+      "mood": "good"
+    },
+    {
+      "id": "chat-team",
+      "title": "Team",
+      "members": ["u1", "u2", "u3"],
+      "messages": [
+        {
+          "id": "chat-team-1",
+          "senderId": "u3",
+          "text": "Кто готов к следующему спринту?",
+          "createdAt": "2026-06-24T11:00:00.000Z"
+        }
+      ],
+      "isGroup": true,
+      "mood": "neutral"
+    }
+  ]
 }

@@ -5,12 +5,10 @@ interface Props {
   chats: Chat[];
   users: User[];
   activeId: string | null;
-  unreadCounts?: Record<string, number>;
-  highlightedChatId?: string | null;
   onSelect: (id: string) => void;
 }
 
-export default function ChatList({ chats, users, activeId, unreadCounts = {}, highlightedChatId = null, onSelect }: Props) {
+export default function ChatList({ chats, users, activeId, onSelect }: Props) {
   return (
     <div className="chat-list">
       <div className="chat-list-header">Чаты</div>
@@ -28,7 +26,7 @@ export default function ChatList({ chats, users, activeId, unreadCounts = {}, hi
           return (
             <button
               key={chat.id}
-              className={`chat-item ${activeId === chat.id ? 'active' : ''} ${unreadCounts[chat.id] ? 'unread' : ''} ${highlightedChatId === chat.id ? 'new-message' : ''}`}
+              className={`chat-item ${activeId === chat.id ? 'active' : ''}`}
               onClick={() => onSelect(chat.id)}
             >
               <div className="chat-item-heading">
@@ -50,7 +48,7 @@ export default function ChatList({ chats, users, activeId, unreadCounts = {}, hi
               </div>
               <div className="chat-item-row">
                 <div className="chat-meta">{chat.members.length} участник{chat.members.length === 1 ? '' : 'а'}</div>
-                <div className="chat-badge">{unreadCounts[chat.id] ? unreadCounts[chat.id] : chat.messages.length}</div>
+                <div className="chat-badge">{chat.messages.length}</div>
               </div>
             </button>
           );
