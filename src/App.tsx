@@ -35,7 +35,8 @@ const APP_STATE_STORAGE_KEY = 'tsr_m_app_state_v1';
 const PRESENCE_TTL_MS = 30_000;
 const PRESENCE_PULSE_MS = 10_000;
 
-function playIncomingMessageSound() {
+function playIncomingMessageSound(enabled = true) {
+  if (!enabled) return;
   if (typeof window === 'undefined') return;
   const AudioContextCtor = window.AudioContext ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioContextCtor) return;
@@ -116,6 +117,7 @@ function App() {
   const [userSearchResults, setUserSearchResults] = useState<User[]>([]);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [highlightedChatId, setHighlightedChatId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [device] = useState(getDeviceType());
   const previousChatsRef = useRef<Chat[]>(persistedAppState?.chats ?? []);
 
@@ -265,7 +267,7 @@ function App() {
           setHighlightedChatId((prev) => (prev === chat.id ? null : prev));
         }, 1400);
         setUnreadCounts((prev) => ({ ...prev, [chat.id]: (prev[chat.id] || 0) + incomingMessages.length }));
-        playIncomingMessageSound();
+        playIncomingMessageSound(currentUser?.soundEnabled !== false);
         setUsers((prev) => prev.map((user) => (user.id === incomingMessages[0].senderId ? { ...user, isOnline: true, lastSeenAt: new Date().toISOString() } : user)));
         if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
           const sender = users.find((user) => user.id === incomingMessages[0].senderId);
@@ -349,6 +351,8 @@ function App() {
       }
       setCurrentUser(updated);
       setUsers((prev) => prev.map((user) => (user.id === updated.id ? updated : user)));
+      setToastMessage('Профиль сохранён');
+      window.setTimeout(() => setToastMessage(null), 2200);
     }
   };
 
@@ -790,6 +794,7 @@ function App() {
                       <span className="profile-view-meta-value">{profileViewerUser.googleEmail}</span>
                     </div>
                   ) : null}
+                  <div className={`toast ${toastMessage ? 'show' : ''}`}>{toastMessage}</div>
                 </div>
               </div>
             </div>

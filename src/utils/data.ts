@@ -11,6 +11,7 @@ export interface UserProfile {
   nameColor: string;
   isOnline?: boolean;
   lastSeenAt?: string;
+  soundEnabled?: boolean;
 }
 
 export interface User extends UserProfile {

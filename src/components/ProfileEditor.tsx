@@ -152,6 +152,14 @@ export default function ProfileEditor({ profile, onUpdate }: Props) {
           />
           Синхронизировать профиль с сервером
         </label>
+        <label className="sync-toggle">
+          <input
+            type="checkbox"
+            checked={Boolean((local as UserProfile & { soundEnabled?: boolean }).soundEnabled !== false)}
+            onChange={(e) => setLocal({ ...local, soundEnabled: e.target.checked } as UserProfile & { soundEnabled?: boolean })}
+          />
+          Звук уведомлений
+        </label>
         <div className="colors-grid">
           {defaultFrames.map((color) => (
             <button
