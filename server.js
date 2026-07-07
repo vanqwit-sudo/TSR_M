@@ -17,9 +17,20 @@ const defaultState = {
 
 function normalizeState(state) {
   const safeState = state && typeof state === 'object' ? state : {};
+  const users = Array.isArray(safeState.users) ? safeState.users : [];
+  const validUsers = users.filter(Boolean).filter((user) => user && typeof user.id === 'string' && typeof user.username === 'string' && typeof user.displayName === 'string');
+  const validUserIds = new Set(validUsers.map((user) => user.id));
+  const chats = Array.isArray(safeState.chats) ? safeState.chats : [];
+  const validChats = chats.filter(Boolean).map((chat) => ({
+    ...chat,
+    members: Array.isArray(chat.members)
+      ? chat.members.filter((memberId) => typeof memberId === 'string' && validUserIds.has(memberId))
+      : [],
+  })).filter((chat) => Array.isArray(chat.members) && chat.members.length > 0);
+
   return {
-    users: Array.isArray(safeState.users) ? safeState.users : [],
-    chats: Array.isArray(safeState.chats) ? safeState.chats : [],
+    users: validUsers,
+    chats: validChats,
   };
 }
 

@@ -87,9 +87,15 @@ function readPersistedAppState() {
 function writePersistedAppState(currentUser: User | null, users: User[], chats: Chat[], activeChatId: string | null) {
   if (typeof window === 'undefined') return;
   try {
+    const validUserIds = new Set(users.filter((user) => user?.id).map((user) => user.id));
+    const validChats = chats
+      .filter((chat) => chat?.id && Array.isArray(chat.members) && chat.members.some((memberId) => validUserIds.has(memberId)))
+      .map((chat) => ({ ...chat, members: chat.members.filter((memberId) => validUserIds.has(memberId)) }))
+      .filter((chat) => chat.members.length > 0);
+
     window.localStorage.setItem(
       APP_STATE_STORAGE_KEY,
-      JSON.stringify({ currentUser, users, chats, activeChatId }),
+      JSON.stringify({ currentUser, users, chats: validChats, activeChatId }),
     );
   } catch {
     // ignore storage errors
@@ -223,17 +229,20 @@ function App() {
       const restoredProfile = loadPersistedProfile(user);
       const baseUser = user ?? persistedState?.currentUser ?? null;
       const hydratedUser = baseUser && restoredProfile ? { ...baseUser, ...restoredProfile } : baseUser;
-      setCurrentUser(hydratedUser);
-      setUsers(allUsers.map((item) => (item.id === hydratedUser?.id ? { ...item, ...restoredProfile } : item)));
+      const nextUsers = allUsers.map((item) => (item.id === hydratedUser?.id ? { ...item, ...restoredProfile } : item));
+      const validUserIds = new Set(nextUsers.filter((item) => item?.id).map((item) => item.id));
+      const nextChats = (await getChatsForUser(hydratedUser?.id ?? ''))
+        .filter((chat) => chat?.id && Array.isArray(chat.members) && chat.members.some((memberId) => validUserIds.has(memberId)))
+        .map((chat) => ({ ...chat, members: chat.members.filter((memberId) => validUserIds.has(memberId)) }))
+        .filter((chat) => chat.members.length > 0);
 
-      if (hydratedUser?.id) {
-        const userChats = await getChatsForUser(hydratedUser.id);
-        setChats(userChats);
-        setActiveChatId((prev) => {
-          if (prev && userChats.some((chat) => chat.id === prev)) return prev;
-          return userChats[0]?.id ?? null;
-        });
-      }
+      setCurrentUser(hydratedUser);
+      setUsers(nextUsers);
+      setChats(nextChats);
+      setActiveChatId((prev) => {
+        if (prev && nextChats.some((chat) => chat.id === prev)) return prev;
+        return nextChats[0]?.id ?? null;
+      });
     } catch {
       // keep the persisted state if the server is unavailable
     }
