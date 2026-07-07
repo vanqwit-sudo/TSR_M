@@ -582,6 +582,22 @@ function App() {
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </div>
+                {isMobileViewport ? (
+                  <div className="mobile-tab-bar">
+                    <button type="button" className={searchMode === 'chats' ? 'active' : ''} onClick={() => setSearchMode('chats')}>
+                      Чаты
+                    </button>
+                    <button type="button" className={searchMode === 'users' ? 'active' : ''} onClick={() => setSearchMode('users')}>
+                      Люди
+                    </button>
+                    <button type="button" className="mobile-tab-bar-action" onClick={() => { setShowProfile((prev) => !prev); setShowCreateChat(false); }}>
+                      Профиль
+                    </button>
+                    <button type="button" className="mobile-tab-bar-action mobile-tab-bar-primary" onClick={() => { setShowCreateChat((prev) => !prev); setShowProfile(false); }}>
+                      +
+                    </button>
+                  </div>
+                ) : null}
                 <div className="compact-search-mode sidebar-search-mode">
                   <button type="button" className={searchMode === 'chats' ? 'active' : ''} onClick={() => setSearchMode('chats')}>
                     Чаты
@@ -677,6 +693,22 @@ function App() {
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </div>
+                {isMobileViewport ? (
+                  <div className="mobile-tab-bar">
+                    <button type="button" className={searchMode === 'chats' ? 'active' : ''} onClick={() => setSearchMode('chats')}>
+                      Чаты
+                    </button>
+                    <button type="button" className={searchMode === 'users' ? 'active' : ''} onClick={() => setSearchMode('users')}>
+                      Люди
+                    </button>
+                    <button type="button" className="mobile-tab-bar-action" onClick={() => { setShowProfile((prev) => !prev); setShowCreateChat(false); }}>
+                      Профиль
+                    </button>
+                    <button type="button" className="mobile-tab-bar-action mobile-tab-bar-primary" onClick={() => { setShowCreateChat((prev) => !prev); setShowProfile(false); }}>
+                      +
+                    </button>
+                  </div>
+                ) : null}
                 <div className="search-mode compact-search-mode">
                   <button type="button" className={searchMode === 'chats' ? 'active' : ''} onClick={() => setSearchMode('chats')}>
                     Чаты
