@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import './styles.css';
 import type { Chat, User, Message } from './utils/data';
+import Avatar from './components/Avatar';
 import ChatList from './components/ChatList';
 import ChatView from './components/ChatView';
 import CreateChat from './components/CreateChat';
@@ -51,6 +52,10 @@ export default function App() {
   });
   const [search, setSearch] = useState('');
   const [enableSound, setEnableSound] = useState(true);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window === 'undefined') return 'light';
+    return window.localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
+  });
 
   useEffect(() => {
     if (!signedUser) return;
@@ -58,6 +63,13 @@ export default function App() {
       window.localStorage.setItem('signed_user', JSON.stringify(signedUser));
     } catch {}
   }, [signedUser]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('theme', theme);
+      document.body.classList.toggle('dark-theme', theme === 'dark');
+    } catch {}
+  }, [theme]);
 
   const user = useMemo(() => signedUser ?? sampleUser(), [signedUser]);
 
@@ -133,14 +145,19 @@ export default function App() {
       <aside className="sidebar">
         <div className="sidebar-top">
           <div className="brand">TSR</div>
+          <div className="sidebar-user">
+            <Avatar src={user.avatarUrl} alt={user.displayName} name={user.displayName} size={44} className="sidebar-avatar" />
+            <div className="sidebar-user-meta">
+              <div className="sidebar-user-name">{user.displayName}</div>
+              <div className="sidebar-user-handle">@{user.username}</div>
+            </div>
+          </div>
           <div className="search">
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск по чатам" />
           </div>
-        </div>
-        <ChatList chats={filteredChats} users={[user]} activeId={activeChatId} onSelect={(id) => setActiveChatId(id)} />
-        <div className="sidebar-bottom">
           <CreateChat onCreate={handleCreateChat} users={[user]} />
         </div>
+        <ChatList chats={filteredChats} activeId={activeChatId} onSelect={(id) => setActiveChatId(id)} />
       </aside>
 
       <main className="main-area">
@@ -157,10 +174,14 @@ export default function App() {
       <aside className="rightpanel">
         <ProfileEditor profile={user} onUpdate={handleUpdateProfile} />
         <div className="settings-card">
-          <div className="settings-title">Уведомления</div>
+          <div className="settings-title">Настройки</div>
           <label className="settings-switch">
             <input type="checkbox" checked={enableSound} onChange={(event) => setEnableSound(event.target.checked)} />
             <span>Звук отправки</span>
+          </label>
+          <label className="settings-switch">
+            <input type="checkbox" checked={theme === 'dark'} onChange={(event) => setTheme(event.target.checked ? 'dark' : 'light')} />
+            <span>Темная тема</span>
           </label>
         </div>
       </aside>
